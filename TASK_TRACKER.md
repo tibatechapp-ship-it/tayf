@@ -34,6 +34,7 @@
 | T-19 | 10 | Performance: real measurements, indexes from evidence, load test | NOT_STARTED | Numbers documented | no load tool installed |
 | T-20 | 11 | Full suite incl. security + load | NOT_STARTED | Mandatory cases executed | — |
 | T-21 | 12 | Docker/CI/deploy/monitoring/backups/runbook | NOT_STARTED | Clean-env deploy + health checks | **Docker missing on device** |
+| T-22 | 12 | GitHub repo + CI workflow | BLOCKED | Green run on push | repo `tibatechapp-ship-it/tayf` (private) pushed; run 41137952817 failed in 3s — GitHub annotation: *"job was not started because recent account payments have failed or your spending limit needs to be increased"* → private-repo Actions billing wall, **not code**. Local equivalents pass: `pytest` 33, `npm ci && npm run build` OK. Fix = make the repo public (free minutes) or add billing. |
 
 ---
 
@@ -69,6 +70,8 @@
 - Frontend still has no router/state/Tailwind (Stage 6).
 
 ## NOW
+
+Repo: https://github.com/tibatechapp-ship-it/tayf (private). Awaiting a decision on visibility → CI is blocked on private repos for this account.
 
 Stage 2 is complete and verified (33 tests green, migration cycle clean).
 **Waiting for review of the data model before building schemas + the public API

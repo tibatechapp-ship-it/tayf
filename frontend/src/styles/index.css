@@ -51,6 +51,13 @@ h2 {
   color: var(--muted);
 }
 
+.tagline {
+  margin: 6px 0 0;
+  color: var(--accent);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
 .muted {
   margin: 6px 0 0;
   color: var(--muted);

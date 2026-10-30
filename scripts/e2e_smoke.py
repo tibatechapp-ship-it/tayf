@@ -101,7 +101,7 @@ def wait_for(cdp: Cdp, expression: str, deadline: float, label: str):
 
 def main() -> int:
     url = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:5173"
-    shot = pathlib.Path(sys.argv[2]) if len(sys.argv) > 2 else pathlib.Path(tempfile.gettempdir()) / "visionforge-stage1.png"
+    shot = pathlib.Path(sys.argv[2]) if len(sys.argv) > 2 else pathlib.Path(tempfile.gettempdir()) / "tayf-stage1.png"
 
     profile = tempfile.mkdtemp(prefix="vf-chrome-")
     browser = launch_chromium(url, profile)
@@ -145,7 +145,7 @@ def main() -> int:
 
         ok = (
             payload.get("status") == "ok"
-            and payload.get("service") == "visionforge-backend"
+            and payload.get("service") == "tayf-backend"
             and not js_errors
             and not dom_errors
             and ("ناجح" in status_text or "succeeded" in status_text)

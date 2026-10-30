@@ -4,6 +4,7 @@ export type Lang = "ar" | "en";
 
 interface Copy {
   brand: string;
+  tagline: string;
   subtitle: string;
   check: string;
   checking: string;
@@ -18,8 +19,9 @@ interface Copy {
 
 export const copy: Record<Lang, Copy> = {
   ar: {
-    brand: "VisionForge Studio",
-    subtitle: "هيكل التطبيق الأولي — المرحلة 1",
+    brand: "Tayf",
+    tagline: "استوديو توليد الفيديو بالذكاء الاصطناعي",
+    subtitle: "هيكل التطبيق الأولي — المرحلة 2",
     check: "فحص اتصال الخادم",
     checking: "جارٍ الفحص…",
     idle: "لم يتم إجراء فحص بعد",
@@ -32,8 +34,9 @@ export const copy: Record<Lang, Copy> = {
     switchLabel: "English",
   },
   en: {
-    brand: "VisionForge Studio",
-    subtitle: "Application skeleton — Stage 1",
+    brand: "Tayf",
+    tagline: "AI video generation studio",
+    subtitle: "Application skeleton — Stage 2",
     check: "Check server connection",
     checking: "Checking…",
     idle: "No check performed yet",

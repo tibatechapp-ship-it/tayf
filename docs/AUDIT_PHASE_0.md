@@ -1,5 +1,9 @@
 # Phase 0 — Audit report (2026-10-30)
 
+> Naming note (2026-10-31): the project was renamed **Tayf** (repo `~/tayf`) after
+> Stage 1. This audit is kept as written — its findings are unaffected; the
+> search pattern below used the earlier working name.
+
 Scope: what exists, what runs, what breaks, what is missing. Every "verified"
 line was produced by a command run on this device; anything else is marked as
 a read-only expectation.

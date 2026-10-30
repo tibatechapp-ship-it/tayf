@@ -33,6 +33,7 @@ export default function App() {
       <header className="header">
         <div>
           <h1>{t.brand}</h1>
+          <p className="tagline">{t.tagline}</p>
           <p className="muted">{t.subtitle}</p>
         </div>
         <button

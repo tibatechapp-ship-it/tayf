@@ -1,4 +1,4 @@
-"""VisionForge Studio API — entry point.
+"""Tayf API — entry point.
 
 Stage 1 (running skeleton): only the health contract exists on purpose.
 Database, auth and generation endpoints arrive in later stages and must not be
@@ -14,7 +14,7 @@ from app.core.config import get_settings
 settings = get_settings()
 
 app = FastAPI(
-    title="VisionForge Studio API",
+    title="Tayf API",
     version="0.1.0",
     description="AI video generation platform — stage 1 skeleton.",
 )

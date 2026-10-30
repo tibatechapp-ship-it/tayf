@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# VisionForge Studio — dev process control (Termux / Linux, no Docker needed).
+# Tayf — dev process control (Termux / Linux, no Docker needed).
 #   ./scripts/dev.sh start|stop|status|logs
 set -uo pipefail
 
@@ -21,7 +21,13 @@ wait_for() { # port label seconds
   echo "  ✖ $label did not start on :$port" >&2; return 1
 }
 
+migrate() {
+  echo "→ alembic upgrade head"
+  ( cd "$ROOT/backend" && alembic upgrade head 2>&1 | tail -3 )
+}
+
 start() {
+  migrate
   if port_busy "$API_PORT"; then echo "API already on :$API_PORT"; else
     ( cd "$ROOT/backend" && setsid --fork python -m uvicorn app.main:app \
         --host 127.0.0.1 --port "$API_PORT" </dev/null >"$API_LOG" 2>&1 )
@@ -53,8 +59,9 @@ status() {
 
 case "${1:-start}" in
   start) start ;;
+  migrate) migrate ;;
   stop) stop ;;
   status) status ;;
   logs) tail -n "${2:-30}" "$API_LOG" "$WEB_LOG" 2>/dev/null ;;
-  *) echo "usage: $0 start|stop|status|logs [n]" >&2; exit 2 ;;
+  *) echo "usage: $0 start|stop|status|migrate|logs [n]" >&2; exit 2 ;;
 esac

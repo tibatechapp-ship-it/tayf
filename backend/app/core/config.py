@@ -16,7 +16,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = "visionforge-backend"
+    app_name: str = "tayf-backend"
     environment: str = "development"
     api_v1_prefix: str = "/api/v1"
     # Dev-only origins: the Vite dev server. Production values come from .env.
@@ -24,6 +24,10 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
+    # Portable by design: SQLite locally, Postgres in production.
+    database_url: str = "sqlite:///./tayf.db"
+    # Echo SQL only when explicitly asked (never in production).
+    db_echo: bool = False
 
 
 @lru_cache

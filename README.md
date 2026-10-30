@@ -1,87 +1,93 @@
-# VisionForge Studio
+# Tayf
 
-AI video generation platform — Arabic-first (AR/EN), built stage by stage with
-tests at every stage.
+AI video generation studio — Arabic-first (AR/EN). Built stage by stage, with
+the proof for every stage recorded in `TASK_TRACKER.md`.
 
-**Current status: Stage 1 — running skeleton.** The only working feature is a
-frontend ↔ backend health check. There is **no** video generation, **no** user
-account and **no** database yet. Nothing here pretends otherwise.
+**Status: Stage 2 — data model + migrations + repositories.**
+There is still **no video generation, no auth, and no public API** beyond
+`GET /api/v1/health`. The UI says so out loud; nothing here pretends otherwise.
 
 ---
 
-## What works right now (verified)
+## Verified today
 
-| Piece | Proof |
+| Piece | Evidence |
 |---|---|
-| `GET /api/v1/health` (FastAPI) | `pytest` → 4 passed; `curl` → 200 JSON |
-| React + Vite + TS page with a real "check server" button | `npm run build` OK; browser click test PASS |
-| Vite `/api` proxy → backend | `curl 127.0.0.1:5173/api/v1/health` → 200 |
-| One-command dev control | `./scripts/dev.sh start` |
+| `GET /api/v1/health` | `pytest` (health contract suite) + `curl` → 200 |
+| Browser → Vite proxy → FastAPI | `scripts/e2e_smoke.py` → `RESULT: PASS`, 0 JS errors |
+| 3 tables (users, projects, generation_jobs) with UUID PKs, CHECK enums, cascades | `alembic upgrade head` + DDL dump in `docs/DATA_MODEL.md` |
+| Migration rollback | `alembic downgrade base` → re-upgrade, suite passes |
+| Models ↔ migrations cannot drift | `compare_metadata()` test → no diff |
+| Owner isolation | `test_project_crud.py` (other user gets `None`, cascade proven from a fresh session) |
+| Backend suite | `pytest` → **33 passed in 2.13s** |
+| Frontend build | `npm run build` → tsc clean + 70.22 kB gzip |
 
 ## Requirements
 
 - Python 3.11+ with `fastapi`, `uvicorn`, `pydantic`, `pydantic-settings`,
-  `pytest`, `httpx`
-  - **Termux note:** these are already installed system-wide here, and a venv
-    cannot build `pydantic-core` on Python 3.14 (no wheel) — use system Python.
-  - Anywhere else: `python -m venv .venv && .venv/bin/pip install -r backend/requirements-dev.txt`
-- Node 20+ (here: Node 26)
-- TypeScript **5.x** is pinned — TS 7 has no `android-arm64` binary
+  `sqlalchemy`, `alembic`, `pytest`, `httpx`
+  - **Termux note:** already installed system-wide here; a venv cannot build
+    `pydantic-core` on Python 3.14. Elsewhere:
+    `python -m venv .venv && .venv/bin/pip install -r backend/requirements-dev.txt`
+- Node 20+ (here 26) — TypeScript is pinned to **5.x** (TS 7 has no android-arm64 build)
+- No Postgres needed for development: the default `DATABASE_URL` is SQLite.
 
-## Run it
+## Run
 
 ```bash
-cd visionforge-studio
-cp .env.example .env          # optional in dev; defaults already work
+cd tayf
+cp .env.example .env          # optional; defaults work
 
-./scripts/dev.sh start        # starts backend :8000 + frontend :5173
+./scripts/dev.sh start        # runs alembic upgrade head, then API :8000 + UI :5173
 ./scripts/dev.sh status
 ./scripts/dev.sh stop
 ```
 
-Then open <http://127.0.0.1:5173> and press **فحص اتصال الخادم**.
+Open <http://127.0.0.1:5173> and press **فحص اتصال الخادم**.
 
-Manual alternative:
-
-```bash
-# terminal 1
-cd backend && python -m uvicorn app.main:app --reload --port 8000
-# terminal 2
-cd frontend && npm install && npm run dev
-```
-
-## Verify (the same commands the tracker cites)
+## Verify (what the tracker cites)
 
 ```bash
-# backend contract tests
-cd backend && python -m pytest
+cd backend && python -m pytest -v        # 33 passed
+cd frontend && npm run build             # typecheck + bundle
+python scripts/e2e_smoke.py http://127.0.0.1:5173 /tmp/tayf.png   # RESULT: PASS
 
-# frontend typecheck + production build
-cd frontend && npm run build
-
-# real browser proof: click the button, assert the payload, save a screenshot
-python scripts/e2e_smoke.py http://127.0.0.1:5173 /tmp/stage1.png
+# schema proof
+cd backend && alembic upgrade head && alembic downgrade base && alembic upgrade head
 ```
 
-Expected tail: `RESULT: PASS`.
+## Switching to PostgreSQL
+
+The schema is engine-neutral (`sa.Uuid`, `sa.JSON`, VARCHAR+CHECK enums), so it
+is a URL change plus one command — not a rewrite:
+
+```bash
+# .env
+DATABASE_URL=postgresql+psycopg://tayf:secret@localhost:5432/tayf
+pip install "psycopg[binary]"
+cd backend && alembic upgrade head
+```
+
+Nothing else changes: repositories and models contain no SQLite-specific code
+(the only pragma is guarded to SQLite connections).
 
 ## Layout
 
 ```
-backend/app/{main.py,core/config.py,api/v1/health.py}   # health slice only
-backend/tests/test_health.py                            # contract tests
+backend/
+  app/main.py                     FastAPI app (health only)
+  app/core/config.py              pydantic-settings (.env, DATABASE_URL, CORS)
+  app/api/v1/health.py            the health contract
+  app/models/                     Base + mixins, User, Project, GenerationJob, enums
+  app/db/session.py               engine factory, SQLite FK pragma, session dependency
+  app/repositories/               user_repository, project_repository (ownership at query level)
+  migrations/                     Alembic env + initial schema
+  tests/                          health, migrations, users, projects (33 tests)
 frontend/src/{App.tsx,services/api.ts,i18n/dictionary.ts}
-scripts/dev.sh                                          # start|stop|status|logs
-scripts/e2e_smoke.py                                    # Chromium+CDP E2E
-docs/AUDIT_PHASE_0.md                                   # what exists / what's missing
-docs/ARCHITECTURE.md                                    # target architecture + ADRs
-TASK_TRACKER.md                                         # single source of truth
+scripts/dev.sh                    start|stop|status|migrate|logs
+scripts/e2e_smoke.py              Chromium+CDP end-to-end proof
+docs/                             AUDIT_PHASE_0, ARCHITECTURE, DATA_MODEL
 ```
-
-## Environment variables
-
-See `.env.example`. Nothing is required for development; every later secret
-(database URL, JWT secret, provider keys) stays out of git.
 
 ## API
 
@@ -89,12 +95,10 @@ See `.env.example`. Nothing is required for development; every later secret
 |---|---|---|
 | GET | `/api/v1/health` | implemented |
 | GET | `/docs`, `/openapi.json` | implemented (FastAPI) |
-| everything else in the plan | — | not implemented |
+| auth / projects / generations / videos / billing | — | **not implemented (Stage 4+)** |
 
-## Next stage (awaiting review)
+## Next stage
 
-Stage 2/3: PostgreSQL schema + Alembic migrations (users, projects, generation
-jobs, videos, assets, credit ledger, notifications, API keys, audit log) with
-integrity tests. Postgres is **not installed on this device** — it has to be
-installed locally or provided as a dev database before that stage can be
-verified for real.
+Stage 3/4: request/response schemas, then the project + auth API on top of these
+repositories (Argon2id, access/refresh tokens, per-resource ownership checks,
+negative tests). No endpoint is announced before it has tests.

@@ -1,7 +1,8 @@
-# Architecture — VisionForge Studio (target state)
+# Architecture — Tayf (target state)
 
-Status: **design document**. Only the `health` slice exists in code today
-(Stage 1). Everything else below is planned and is marked as such.
+Status: **partly implemented.** Working today: the `health` slice, the data
+model (users/projects/generation_jobs), Alembic migrations and owner-scoped
+repositories (Stage 2). Everything else below is planned and marked as such.
 
 ## 1. Component map
 

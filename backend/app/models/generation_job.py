@@ -10,10 +10,10 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import JSON, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.base import Base, TimestampMixin, UTCDateTime, UUIDPrimaryKeyMixin
 from app.models.enums import GenerationStatus
 from app.models.project import enum_column
 
@@ -43,7 +43,7 @@ class GenerationJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     result_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UTCDateTime(), nullable=True
     )
 
     project: Mapped["Project"] = relationship(back_populates="jobs")

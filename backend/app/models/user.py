@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, true
+from sqlalchemy import Boolean, String, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.base import Base, TimestampMixin, UTCDateTime, UUIDPrimaryKeyMixin
 
 
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -23,7 +23,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Boolean, default=True, server_default=true(), nullable=False
     )
     last_login_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UTCDateTime(), nullable=True
     )
 
     projects: Mapped[list["Project"]] = relationship(  # noqa: F821 - resolved by registry

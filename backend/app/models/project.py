@@ -54,5 +54,10 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         passive_deletes=True,
     )
 
+    @property
+    def owner_id(self) -> uuid.UUID:
+        """API-facing name for ``user_id`` (the wire contract says ``owner_id``)."""
+        return self.user_id
+
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Project {self.id} {self.name!r}>"

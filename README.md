@@ -3,9 +3,11 @@
 AI video generation studio — Arabic-first (AR/EN). Built stage by stage, with
 the proof for every stage recorded in `TASK_TRACKER.md`.
 
-**Status: Stage 2 — data model + migrations + repositories.**
-There is still **no video generation, no auth, and no public API** beyond
-`GET /api/v1/health`. The UI says so out loud; nothing here pretends otherwise.
+**Status: Stage 3 — project CRUD API on top of the Stage-2 data model.**
+There is still **no video generation and no auth**. The UI says so out loud;
+nothing here pretends otherwise.
+
+[![CI](https://github.com/tibatechapp-ship-it/tayf/actions/workflows/ci.yml/badge.svg)](https://github.com/tibatechapp-ship-it/tayf/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
@@ -19,7 +21,7 @@ There is still **no video generation, no auth, and no public API** beyond
 | Migration rollback | `alembic downgrade base` → re-upgrade, suite passes |
 | Models ↔ migrations cannot drift | `compare_metadata()` test → no diff |
 | Owner isolation | `test_project_crud.py` (other user gets `None`, cascade proven from a fresh session) |
-| Backend suite | `pytest` → **33 passed in 2.13s** |
+| Backend suite | `pytest` → **66 passed** |
 | Frontend build | `npm run build` → tsc clean + 70.22 kB gzip |
 
 ## Requirements
@@ -48,7 +50,7 @@ Open <http://127.0.0.1:5173> and press **فحص اتصال الخادم**.
 ## Verify (what the tracker cites)
 
 ```bash
-cd backend && python -m pytest -v        # 33 passed
+cd backend && python -m pytest -v        # 66 passed
 cd frontend && npm run build             # typecheck + bundle
 python scripts/e2e_smoke.py http://127.0.0.1:5173 /tmp/tayf.png   # RESULT: PASS
 

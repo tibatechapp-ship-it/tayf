@@ -27,8 +27,9 @@ from app.api.v1.endpoints import (
     jobs_router,
     projects_router,
 )
-from app.api.v1.health import router as health_router
+from app.api.v1.health import APP_VERSION, router as health_router
 from app.core.config import get_settings
+from app.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
 from app.services.storage.factory import run_cleanup_once
 
 settings = get_settings()
@@ -59,7 +60,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Tayf Studio API",
-    version="0.4.0",
+    version=APP_VERSION,
     description=(
         "AI video generation platform (Arabic-first). The unified build adds "
         "real auth, credits, storage, safety and the full generation pipeline "
@@ -79,6 +80,11 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# Hardening + observability: applied last -> outermost (every response covered,
+# including /docs and /api/v1/files/*).
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIDMiddleware)
 
 app.include_router(health_router, prefix=settings.API_V1_PREFIX)
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)

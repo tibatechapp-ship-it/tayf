@@ -26,10 +26,14 @@ users ──1:N── projects ──1:N── generation_jobs
 |---|---|---|
 | `id` | UUID | PK |
 | `user_id` | UUID | FK → `users.id`, **ON DELETE CASCADE** |
-| `name` | varchar(120) | NOT NULL, trimmed, 1–120 chars (repository validates) |
+| `name` | varchar(120) | NOT NULL, trimmed, 1–120 chars (repository validates; the API schema is stricter: 100) |
 | `description` | text | NULL |
 | `status` | varchar(24) | `draft \| active \| archived`, CHECK constraint |
-| `created_at`, `updated_at` | timestamptz | UTC |
+| `created_at`, `updated_at` | timestamptz | UTC, always timezone-aware (`UTCDateTime` decorator) |
+
+> **Wire contract:** the API exposes this column as `owner_id`
+> (`Project.owner_id` is a read-only property over `user_id`). The database is not
+> renamed — `user_id` stays the FK name; only the JSON contract uses `owner_id`.
 
 Index: `ix_projects_user_id_created_at (user_id, created_at)` — the only hot
 query is "this user's projects, newest first", and it is paginated (limit

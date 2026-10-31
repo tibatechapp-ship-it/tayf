@@ -4,7 +4,7 @@
 > Statuses: `NOT_STARTED` · `IN_PROGRESS` · `IMPLEMENTED` · `TESTED` · `BLOCKED`.
 > `TESTED` = a command was actually run and its real output is quoted below.
 
-**Last updated:** 2026-10-31 · **Reached:** Stage 2 (data model) — awaiting review
+**Last updated:** 2026-10-31 · **Reached:** Stage 3 (schemas + project CRUD API) — awaiting review
 
 ---
 
@@ -24,8 +24,9 @@
 | T-09 | 2 | Alembic migrations (upgrade / downgrade / re-upgrade) | TESTED | Clean both directions, models↔migrations no drift | `test_migrations.py` (3 tests) |
 | T-10 | 2 | Repositories (owner-scoped) | TESTED | No cross-user read; pagination clamped | `test_project_crud.py` |
 | T-11 | 2 | Integration tests + isolation fixtures | TESTED | 33 passed, per-test SQLite file | `pytest` → 33 passed in 2.13s |
-| T-12 | 3 | Request/response schemas (Pydantic) + pagination envelope | NOT_STARTED | Validation + error contract | depends on T-11 ✅ |
-| T-13 | 4 | Project API (`/projects` CRUD) on the repositories | NOT_STARTED | Ownership + negative tests green | depends on T-12 |
+| T-12 | 3 | Request/response schemas (Pydantic), input/output split | TESTED | Validation + error contract | `pytest tests/test_api_projects.py` → 33 passed |
+| T-13 | 3 | Project API (`/projects` CRUD) on the repositories | TESTED | Ownership + negative tests green | same suite; isolation trio returns **404**, live `curl` 201/200/404 |
+| T-13b | 3 | Pagination envelope (`{items,total}`) | NOT_STARTED | Deferred with reason | Spec asked for a plain list; envelope needs a count query per request |
 | T-14 | 5 | Auth: Argon2id, access/refresh rotation, rate limits | NOT_STARTED | Auth/authorization suite green | needs `argon2-cffi` (no wheel risk — pure C build) |
 | T-15 | 6 | Full frontend (15 screens), router, state, i18n | NOT_STARTED | Core flows on real API | Tailwind/router/state lib not added |
 | T-16 | 7 | Provider abstraction + capability registry + real provider | BLOCKED | Real credential test OR documented blocker | **no provider credentials** |
@@ -60,6 +61,25 @@
 8. **Cascade is proven at the DB level** (fresh session), because the ORM
    identity map can lie about a row that was deleted underneath it.
 
+9. **`owner_id` on the wire, `user_id` in the DB.** The column stays `user_id`
+   (FK to `users.id`); `Project.owner_id` is a read-only property so
+   `ProjectRead` can expose the API-facing name without renaming a column.
+10. **Soft delete semantics (DELETE):** sets `status=archived`, returns `204`,
+    idempotent. Archived rows are hidden from `GET /projects` unless
+    `include_archived=true`, and stay readable by id (the owner keeps their
+    history; nothing is destroyed before a real retention policy exists).
+11. **Invalid pagination is refused, not clamped** (`limit` 1-100, `offset` >= 0
+    → `422`). The repository still clamps defensively for non-HTTP callers.
+12. **Foreign rows return 404, never 403** — a 403 would confirm the id exists.
+    Proven by tests and by a live `curl` against the dev server.
+13. **Mass assignment is blocked** (`extra="forbid"` on create/update): a client
+    cannot set `id`, `status` or timestamps.
+14. **`UTCDateTime` fix (real bug found in Stage 3):** SQLite returns naive
+    datetimes even for `DateTime(timezone=True)`, so a freshly created row
+    serialized `...Z` while a re-read row serialized without an offset — the same
+    resource in two formats. A `TypeDecorator` now normalizes both directions;
+    DDL is unchanged (still `TIMESTAMP WITH TIME ZONE`), so Postgres is unaffected.
+
 ## Known gaps / risks
 
 - SQLite is not the production engine: no row-level locks, weaker concurrency.
@@ -71,8 +91,14 @@
 
 ## NOW
 
-Repo: https://github.com/tibatechapp-ship-it/tayf (private). Awaiting a decision on visibility → CI is blocked on private repos for this account.
+Repo: https://github.com/tibatechapp-ship-it/tayf — **locked to Private** (confirmed
+with `gh repo view`). CI on private repos is blocked for this account by GitHub's
+Actions billing wall; local verification is the gate until visibility changes.
 
-Stage 2 is complete and verified (33 tests green, migration cycle clean).
-**Waiting for review of the data model before building schemas + the public API
-(Stage 3/4).**
+Stage 3 is complete and verified: 66 backend tests green (33 new API tests),
+frontend build clean, Swagger renders 6 operations, live `curl` cycle 201/200/404,
+pre-push secret gate clean.
+
+**Auth middleware pending for Stage 4.** Currently relying on an explicit
+`owner_id` query/body parameter to test ownership isolation.
+**Waiting for review of the Projects API before touching auth (Stage 5).**

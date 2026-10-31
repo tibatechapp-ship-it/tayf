@@ -160,10 +160,25 @@ export interface Credits {
   entries: LedgerEntry[];
 }
 
+export interface VersionInfo {
+  service: string;
+  version: string;
+  api_prefix: string;
+  environment: string;
+  python_version: string;
+  storage_backend: string;
+  ai_provider: string;
+  timestamp: string;
+}
+
 // ---------- endpoints ----------
 
 export function checkHealth(): Promise<Health> {
   return request<Health>("/health", { timeout: 5000 });
+}
+
+export function fetchVersion(): Promise<VersionInfo> {
+  return request<VersionInfo>("/version", { timeout: 5000 });
 }
 
 export function register(payload: {

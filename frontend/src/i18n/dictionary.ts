@@ -75,6 +75,10 @@ export interface Copy {
 
   honestyTitle: string;
   honestyBody: string;
+  footerNote: string;
+  featureHonest: string;
+  featureCredits: string;
+  featureSafety: string;
 }
 
 export const copy: Record<Lang, Copy> = {
@@ -148,6 +152,11 @@ export const copy: Record<Lang, Copy> = {
     honestyTitle: "ما الذي يعمل فعلًا؟",
     honestyBody:
       "كل شيء هنا حقيقي: حسابات بـ Argon2id، رصيد قابل للتدقيق، تخزين فعلي، وتجميع MP4 بـ ffmpeg. المزود الافتراضي (mock) ينتج لوحات ومؤثرات وهمية موسومة بوضوح بـ SIMULATED. لتفعيل التوليد الحقيقي شغّل بوابة ai-gateway أو اضبط مزودًا متوافقًا مع OpenAI في ‎.env.",
+
+    footerNote: "كل ناتج محاكاة موسوم بوضوح — والفشل يُرجِع رصيدك تلقائيًا.",
+    featureHonest: "صدق مطلق: كل مخرج محاكاة يحمل وسم SIMULATED ظاهرًا",
+    featureCredits: "رصيد قابل للتدقيق يُرد تلقائيًا عند أي فشل",
+    featureSafety: "فلترة محتوى قبل التوليد وبعده",
   },
   en: {
     dir: "ltr",
@@ -219,6 +228,11 @@ export const copy: Record<Lang, Copy> = {
     honestyTitle: "What actually works",
     honestyBody:
       "Everything here is real: Argon2id accounts, an auditable credit ledger, real storage and real MP4 composition via ffmpeg. The default provider (mock) fabricates storyboards and keyframes clearly stamped SIMULATED. To enable real generation, run the ai-gateway sidecar or configure an OpenAI-compatible provider in .env.",
+
+    footerNote: "Every simulated output is clearly labeled — failures refund your credits automatically.",
+    featureHonest: "Absolute honesty: simulated output is always stamped SIMULATED",
+    featureCredits: "Auditable credits, refunded automatically on any failure",
+    featureSafety: "Content safety screening before and after generation",
   },
 };
 

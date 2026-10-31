@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { copy, type Lang } from "./i18n/dictionary";
 import {
   fetchMe,
+  fetchVersion,
   getToken,
   setToken,
   type TokenResponse,
@@ -16,6 +17,14 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
   const [balance, setBalance] = useState(0);
+  const [version, setVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Public endpoint: powers the version chip in the footer; failure is benign.
+    fetchVersion()
+      .then((info) => setVersion(info.version))
+      .catch(() => setVersion(null));
+  }, []);
 
   useEffect(() => {
     const token = getToken();
@@ -65,6 +74,12 @@ export default function App() {
       ) : (
         <AuthView lang={lang} onAuthenticated={handleAuthenticated} onLangSwitch={handleLangSwitch} />
       )}
+      <footer className="app-footer">
+        <span className="footer-brand" dir="ltr">
+          {t.brand} Studio{version ? ` · v${version}` : ""}
+        </span>
+        <span className="muted">{t.footerNote}</span>
+      </footer>
     </div>
   );
 }

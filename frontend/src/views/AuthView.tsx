@@ -52,6 +52,12 @@ export default function AuthView({ lang, onAuthenticated, onLangSwitch }: Props)
         </button>
       </header>
 
+      <ul className="auth-features">
+        <li>{t.featureHonest}</li>
+        <li>{t.featureCredits}</li>
+        <li>{t.featureSafety}</li>
+      </ul>
+
       <section className="card auth-card" aria-label={mode === "login" ? t.loginTitle : t.registerTitle}>
         <div className="tabs" role="tablist">
           <button

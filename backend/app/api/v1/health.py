@@ -22,7 +22,7 @@ def health() -> HealthResponse:
     settings = get_settings()
     return HealthResponse(
         status="ok",
-        service=settings.app_name,
-        environment=settings.environment,
+        service=settings.APP_NAME,
+        environment=settings.APP_ENV,
         timestamp=datetime.now(timezone.utc),
     )

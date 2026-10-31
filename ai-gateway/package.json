@@ -1,0 +1,14 @@
+{
+  "name": "tayf-ai-gateway",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Real AI generation sidecar for VisionForge Studio (LLM storyboard + keyframes). Binds 127.0.0.1 only.",
+  "type": "module",
+  "scripts": {
+    "dev": "node index.mjs",
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "z-ai-web-dev-sdk": "^0.0.18"
+  }
+}

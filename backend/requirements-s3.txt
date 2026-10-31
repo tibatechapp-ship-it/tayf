@@ -1,0 +1,2 @@
+# Optional S3-compatible storage backend (MinIO / AWS / R2 / DO Spaces).
+boto3>=1.34,<2.0

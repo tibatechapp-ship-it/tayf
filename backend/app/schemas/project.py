@@ -4,6 +4,10 @@ Input and output models are separate on purpose:
 - ``ProjectCreate``/``ProjectUpdate`` forbid unknown fields, so a client cannot
   mass-assign ``id``, ``status`` or ``created_at``;
 - ``ProjectRead`` is an allow-list — internal columns can never leak by accident.
+
+Since the unified merge the owner is NEVER a body parameter: it comes from the
+JWT (``deps.get_current_user``). ``ProjectRead.job_count`` is enriched by the
+API layer, not stored.
 """
 
 from __future__ import annotations
@@ -53,16 +57,9 @@ class ProjectBase(BaseModel):
 
 
 class ProjectCreate(ProjectBase):
-    """Body of ``POST /projects``.
-
-    ``owner_id`` is temporary: until Stage 4 adds authentication, the client
-    states the owner explicitly so ownership isolation can be tested for real
-    (and attacked for real).
-    """
+    """Body of ``POST /projects`` — the owner is the authenticated user."""
 
     model_config = ConfigDict(extra="forbid")
-
-    owner_id: uuid.UUID
 
 
 class ProjectUpdate(BaseModel):
@@ -94,3 +91,4 @@ class ProjectRead(ProjectBase):
     status: ProjectStatus
     created_at: datetime
     updated_at: datetime
+    job_count: int = 0

@@ -35,7 +35,7 @@ def _database_url() -> str:
     configured = (config.get_main_option("sqlalchemy.url") or "").strip()
     if configured and configured != _PLACEHOLDER:
         return configured
-    return get_settings().database_url
+    return get_settings().DATABASE_URL
 
 
 def _is_sqlite(url: str) -> bool:

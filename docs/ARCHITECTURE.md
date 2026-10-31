@@ -1,87 +1,86 @@
-# Architecture — Tayf (target state)
+# Architecture — Tayf Studio (unified build, v0.4)
 
-Status: **partly implemented.** Working today: the `health` slice, the data
-model (users/projects/generation_jobs), Alembic migrations and owner-scoped
-repositories (Stage 2). Everything else below is planned and marked as such.
+Status: **implemented and tested.** The components below exist in the repo and
+are covered by the backend suite (95 tests) and the browser E2E. The planned
+next stage (dedicated workers, WebSocket progress, payments) is marked as such.
 
-## 1. Component map
+## 1. Component map (as running today)
 
 ```
-┌──────────────┐        HTTPS / WSS        ┌───────────────────────────────┐
-│  Browser     │ ────────────────────────▶ │  Nginx / reverse proxy (TLS)  │
-│  React + TS  │ ◀──────────────────────── │                               │
-└──────────────┘                           └───────┬───────────────┬───────┘
-                                                   │ /api,/ws      │ /media
-                                          ┌────────▼────────┐  ┌───▼─────────┐
-                                          │ FastAPI (app)   │  │ S3 / MinIO  │
-                                          │ api→service→repo│  │ presigned   │
-                                          └───┬────────┬────┘  └─────────────┘
-                                              │        │
-                             ┌────────────────▼──┐  ┌──▼─────────────────┐
-                             │ PostgreSQL        │  │ Redis              │
-                             │ (source of truth) │  │ queue + pub/sub    │
-                             └───────────────────┘  └──┬─────────────────┘
-                                                       │
-                                              ┌────────▼─────────┐
-                                              │ Worker (Celery)  │
-                                              │ provider adapter │
-                                              └────────┬─────────┘
-                                                       │ HTTPS
-                                              ┌────────▼─────────┐
-                                              │ AI video provider│
-                                              └──────────────────┘
+┌──────────────┐   same-origin /api    ┌──────────────────────────────┐
+│  Browser     │ ────────────────────▶ │ Vite dev server / reverse    │
+│  React 19+TS │ ◀──────────────────── │ proxy (TLS in production)    │
+└──────────────┘                       └───────┬──────────────────────┘
+                                               │ /api
+                                     ┌─────────▼─────────┐
+                                     │ FastAPI (app)     │  api → services → repositories
+                                     │ JWT auth, CORS    │
+                                     └──┬──────┬──────┬──┘
+              background tasks (async) │      │      │
+                  ┌────────────────────┘      │      └────────────┐
+        ┌─────────▼──────────┐   ┌────────────▼─────────┐  ┌──────▼──────────────┐
+        │ Pipeline runner    │   │ SQLite (dev) /       │  │ Storage backend     │
+        │ storyboard→frames  │   │ PostgreSQL (prod)    │  │ local fs | S3 API   │
+        │ →ffmpeg→storage    │   │ via DATABASE_URL     │  │ + TTL cleanup loop  │
+        └─────────┬──────────┘   └──────────────────────┘  └─────────────────────┘
+                  │
+        ┌─────────▼──────────────┐
+        │ AI provider (pluggable)│   mock (offline, SIMULATED)
+        │ services/ai/base.py    │─── zai_gateway → ai-gateway sidecar :3030
+        └────────────────────────┘   openai_compatible (bring your own key)
 ```
+
+The `ai-gateway` sidecar is a tiny Node process bound to **127.0.0.1 only**
+(never exposed); the backend reaches it over loopback with an optional shared
+token header.
 
 ## 2. Layer boundaries (enforced by directory layout)
 
 | Layer | Location | Rule |
 |---|---|---|
-| HTTP | `backend/app/api/` | validation + status codes only, no SQL, no business rules |
-| Business | `backend/app/services/` | pricing, job lifecycle, authorization decisions |
-| Persistence | `backend/app/repositories/` | the only place with queries/ORM |
+| HTTP | `backend/app/api/` | validation + status codes only; no SQL, no business rules |
+| Business | `backend/app/services/` | pricing, job lifecycle, refunds, provider calls |
+| Persistence | `backend/app/repositories/` | the only place with queries/ORM; ownership is enforced here |
 | Models/schemas | `models/`, `schemas/` | DB tables vs wire contracts, kept separate |
-| Providers | `backend/app/providers/` | one adapter per vendor behind a single interface |
-| Workers | `backend/app/workers/` | long tasks, idempotent by job id |
-| Frontend | `frontend/src/{pages,features,components,services,stores}` | components never contain business rules |
+| Providers | `backend/app/services/ai/` | one adapter per vendor behind one interface |
+| Storage | `backend/app/services/storage/` | `put/get/exists/delete/iter` + TTL cleanup behind one interface |
+| Frontend | `frontend/src/{views,services,i18n,styles}` | components never contain business rules; zero mock data |
 
-## 3. Data flow: a generation request (planned, Stage 7–9)
+## 3. Data flow: a generation request (implemented)
 
-1. `POST /api/v1/generations` → auth → quota/balance check → **one DB
-   transaction**: create `generation_jobs` row (`queued`) + ledger *hold* entry.
-2. Commit, then enqueue `job_id` (never the whole payload) to Redis.
-3. Worker: `validating` → provider submit → store `provider_job_id` →
-   `submitted`/`processing`. Every transition is a DB write first, then a
-   pub/sub publish.
-4. Provider polling/webhook updates the job; on success the artifact is copied
-   to object storage and a `videos` row is created; the hold is settled
-   (capture or refund) in a single transaction.
-5. WebSocket only *notifies* — the client always re-reads
-   `GET /api/v1/generations/{id}` on connect, so a missed message is harmless.
+1. `POST /projects/{id}/jobs` → JWT → project ownership check.
+2. **Safety pre-filter** screens the prompt; a rejection writes a `rejected`
+   job row and charges nothing.
+3. **One transaction**: insert `pending` job row → `flush()` to get its id →
+   ledger `job_charge` entry carrying that id → commit.
+4. `202 Accepted` with the job contract; a Starlette background task runs the
+   pipeline after the response is sent (works identically under uvicorn and
+   TestClient, which makes the suite deterministic).
+5. Pipeline (`services/pipeline.py`), committing after every step so polling
+   shows live progress:
+   `processing → storyboard (provider) → safety screen of AI text → keyframes
+   per scene (stored) → ffmpeg MP4 compose (thread) → post-artifact check →
+   `completed` (result_url + thumbnail + storyboard JSON)`.
+6. Any failure ⇒ `failed` + **full refund** ledger entry. The mock provider is
+   the only one allowed to set `simulated=true`.
+7. Storage artifacts live under `jobs/<job_id>/…` with a TTL cleanup loop
+   (`STORAGE_TTL_DAYS`, default 7) running inside the app lifespan.
 
-## 4. Key decisions and why
+## 4. Concurrency model (and its honest limits)
 
-| Decision | Why | Alternative rejected |
-|---|---|---|
-| FastAPI + Pydantic v2 | matches available runtime, typed contracts → OpenAPI for free | Django (heavier, less natural async for provider polling) |
-| PostgreSQL + Alembic | real constraints, transactional billing, JSONB for provider payloads | SQLite (no row locks for credit settlement, weak concurrency story) |
-| Append-only credit ledger, corrections as reversing entries | auditable money trail; no in-place edits | mutable `balance` column (loses history, invites drift) |
-| Celery + Redis, DB as source of truth | survives worker restart, simple on one box | Kafka (operational cost with no proven need) |
-| S3-compatible storage + presigned URLs | backend never proxies large files; provider keys stay server-side | serving media from the app process (memory pressure on a phone) |
-| WebSocket as notification, REST as truth | reconnection/alerts cannot corrupt state | WebSocket-only state (loses data on drop) |
-| Provider capability registry | vendors differ (durations, aspect ratios, audio, cancellation) | one "generate" signature for all vendors (fails silently) |
-| Vite dev proxy | one browser origin in dev, no CORS drift | per-environment CORS lists |
-| TypeScript 5.9 pinned | TS 7 native compiler has no android-arm64 binary | TS 7 (unusable on this device) |
+- Background tasks run on uvicorn's event loop; CPU-bound ffmpeg work is moved
+  to threads (`asyncio.to_thread`), provider I/O is async httpx.
+- SQLite WAL keeps reads flowing while a job writes; `PRAGMA foreign_keys=ON`
+  is set on every connection (CASCADE delete actually cascades).
+- **Limit:** one process, in-process queue. The moment the owner outgrows a
+  single box, the pipeline call site (`background_tasks.add_task(...)`) is the
+  only thing to swap for a real worker/queue — everything else stays.
 
-## 5. Non-goals for the first production milestone
+## 5. Next stages (planned, not built — no pretending)
 
-Kubernetes, Kafka, microservices, multi-region, GraphQL. Each adds operational
-cost that a solo-operator deployment cannot absorb before load data exists.
-
-## 6. Security invariants
-
-- Provider API keys never reach the browser; the frontend sees only our API.
-- Price, credit cost and role are computed server-side from DB state.
-- Every resource read/write goes through an ownership check on the server.
-- Refresh tokens rotate; reuse invalidates the family.
-- Uploads: type + size allow-list, virus scan hook, stored outside the web root.
-- Errors and logs never contain tokens, passwords, full provider payloads.
+- WebSocket/SSE live progress instead of 4 s polling.
+- Dedicated worker process + queue for multi-machine scale.
+- A real **video** provider (text-to-video model) behind the same interface —
+  today's real output is storyboard + keyframes + composed MP4.
+- Payments (top-up packages) on top of the existing ledger.
+- Rate limiting + moderation API integration alongside the local term list.

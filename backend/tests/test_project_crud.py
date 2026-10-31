@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
-from app.db.session import make_session_factory
+from app.db.session import make_engine, make_session_factory
 from app.models import GenerationJob, Project, User
 from app.repositories.project_repository import (
     create_project,
@@ -85,6 +85,7 @@ def test_deleting_the_owner_removes_the_projects(
     project = create_project(session, owner_id=user.id, name="will vanish")
     job = GenerationJob(
         project_id=project.id,
+        prompt="a lighthouse in a storm",
         provider_name="mock-dev",
         model_version="v0",
         input_params={},
@@ -106,9 +107,10 @@ def test_project_exposes_its_jobs(session: Session, user: User) -> None:
     project = create_project(session, owner_id=user.id, name="with job")
     job = GenerationJob(
         project_id=project.id,
+        prompt="a cat surfing",
         provider_name="mock-dev",
         model_version="v0",
-        input_params={"prompt": "a cat surfing", "duration_s": 5},
+        input_params={"duration_s": 5},
     )
     session.add(job)
     session.commit()

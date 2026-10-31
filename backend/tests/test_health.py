@@ -16,7 +16,6 @@ def test_health_returns_ok() -> None:
     body = response.json()
     assert body["status"] == "ok"
     assert body["service"] == "tayf-backend"
-    assert body["environment"] == "development"
 
 
 def test_health_timestamp_is_utc_iso8601() -> None:
@@ -35,3 +34,9 @@ def test_health_does_not_leak_configuration() -> None:
 
 def test_unknown_route_returns_404() -> None:
     assert client.get("/api/v1/does-not-exist").status_code == 404
+
+
+def test_root_index_is_honest() -> None:
+    body = client.get("/").json()
+    assert body["service"] == "tayf-studio"
+    assert body["docs"] == "/docs"

@@ -21,11 +21,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install ffmpeg (compose tests build real MP4s)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
       - name: Run tests
+        env:
+          JWT_SECRET: ci-only-secret-0123456789abcdef0123456789abcdef
         run: python -m pytest -v
 
   frontend:

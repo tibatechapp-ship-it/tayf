@@ -1,6 +1,26 @@
-fastapi>=0.115
-uvicorn[standard]>=0.30
-pydantic>=2.7
-pydantic-settings>=2.4
+# Backend runtime dependencies — Termux-friendly on purpose.
+#
+# Notes:
+# - `uvicorn` is intentionally the PLAIN package (not uvicorn[standard]):
+#   the [standard] extra pulls uvloop/httptools which often fail to compile
+#   on Termux/Android.
+# - If `argon2-cffi` or `pillow` fail to build, install native tools first:
+#     pkg install clang python-pillow
+# - `pkg install ffmpeg` is REQUIRED for video composition on Termux.
+# - S3 storage is OPTIONAL: `pip install -r requirements-s3.txt` (boto3 is
+#   heavy; the code raises an honest error if the backend is selected without
+#   it being installed).
+
+fastapi>=0.115,<1.0
+uvicorn>=0.30,<1.0
+pydantic-settings>=2.4,<3.0
+email-validator>=2.0,<3.0
+
+sqlalchemy>=2.0,<3.0
 alembic>=1.13
-sqlalchemy>=2.0
+
+argon2-cffi>=23.1
+pyjwt>=2.9,<3.0
+
+pillow>=10.0,<12.0        # mock-provider placeholder rendering (SIMULATED stamp)
+httpx>=0.27,<1.0          # AI provider HTTP calls

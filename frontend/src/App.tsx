@@ -1,85 +1,70 @@
-import { useCallback, useState } from "react";
-
+import { useEffect, useState } from "react";
 import { copy, type Lang } from "./i18n/dictionary";
-import { ApiError, checkHealth, type HealthResponse } from "./services/api";
-
-type Status = "idle" | "loading" | "success" | "error";
+import {
+  fetchMe,
+  getToken,
+  setToken,
+  type TokenResponse,
+} from "./services/api";
+import AuthView from "./views/AuthView";
+import StudioView from "./views/StudioView";
 
 export default function App() {
   const [lang, setLang] = useState<Lang>("ar");
-  const [status, setStatus] = useState<Status>("idle");
-  const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
   const t = copy[lang];
-  const dir = lang === "ar" ? "rtl" : "ltr";
 
-  const handleCheck = useCallback(async () => {
-    setStatus("loading");
-    setError(null);
-    try {
-      const result = await checkHealth();
-      setHealth(result);
-      setStatus("success");
-    } catch (caught) {
-      setHealth(null);
-      setError(caught instanceof ApiError ? caught.message : "خطأ غير متوقع");
-      setStatus("error");
+  const [ready, setReady] = useState(false);
+  const [username, setUsername] = useState<string | null>(null);
+  const [balance, setBalance] = useState(0);
+
+  useEffect(() => {
+    const token = getToken();
+    if (!token) {
+      setReady(true);
+      return;
     }
+    fetchMe(token)
+      .then((me) => {
+        setUsername(me.user.username);
+        setBalance(me.balance);
+      })
+      .catch(() => setToken(null))
+      .finally(() => setReady(true));
   }, []);
 
+  function handleAuthenticated(data: TokenResponse) {
+    setUsername(data.user.username);
+    setBalance(data.balance);
+  }
+
+  function handleLogout() {
+    setToken(null);
+    setUsername(null);
+    setBalance(0);
+  }
+
+  function handleLangSwitch() {
+    setLang((current) => (current === "ar" ? "en" : "ar"));
+  }
+
+  if (!ready) {
+    return <main className="auth-page loading" />;
+  }
+
   return (
-    <div className="page" dir={dir} lang={lang}>
-      <header className="header">
-        <div>
-          <h1>{t.brand}</h1>
-          <p className="tagline">{t.tagline}</p>
-          <p className="muted">{t.subtitle}</p>
-        </div>
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-        >
-          {t.switchLabel}
-        </button>
-      </header>
-
-      <main className="card">
-        <button
-          type="button"
-          className="primary"
-          onClick={handleCheck}
-          disabled={status === "loading"}
-          data-testid="check-server"
-        >
-          {status === "loading" ? t.checking : t.check}
-        </button>
-
-        <p
-          className={`status ${status}`}
-          role="status"
-          aria-live="polite"
-          data-testid="health-status"
-        >
-          {status === "idle" && t.idle}
-          {status === "loading" && t.checking}
-          {status === "success" && t.success}
-          {status === "error" && `${t.error}: ${error}`}
-        </p>
-
-        {health && (
-          <section>
-            <h2>{t.lastResponse}</h2>
-            <pre data-testid="health-json">{JSON.stringify(health, null, 2)}</pre>
-          </section>
-        )}
-      </main>
-
-      <aside className="card honesty">
-        <h2>{t.honestyTitle}</h2>
-        <p className="muted">{t.honestyBody}</p>
-      </aside>
+    <div dir={t.dir} lang={lang} className="app-root">
+      {username ? (
+        <StudioView
+          lang={lang}
+          username={username}
+          balance={balance}
+          onBalanceChange={setBalance}
+          onLogout={handleLogout}
+          onLangSwitch={handleLangSwitch}
+        />
+      ) : (
+        <AuthView lang={lang} onAuthenticated={handleAuthenticated} onLangSwitch={handleLangSwitch} />
+      )}
     </div>
   );
 }

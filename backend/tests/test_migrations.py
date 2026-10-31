@@ -40,9 +40,20 @@ def test_upgrade_creates_every_table(db_url: str) -> None:
             "select sql from sqlite_master where name='projects'"
         ).fetchone()[0]
 
-    assert tables == {"alembic_version", "users", "projects", "generation_jobs"}
+    assert tables == {
+        "alembic_version",
+        "users",
+        "projects",
+        "generation_jobs",
+        "credit_ledger",
+    }
     assert "ON DELETE CASCADE" in projects_ddl
     assert "CHECK (status IN ('draft', 'active', 'archived'))" in projects_ddl
+
+    jobs_ddl = connection.execute(
+        "select sql from sqlite_master where name='generation_jobs'"
+    ).fetchone()[0]
+    assert "rejected" in jobs_ddl  # extended generation_status CHECK
 
 
 def test_migrations_match_the_models(db_url: str) -> None:
@@ -70,7 +81,9 @@ def test_downgrade_and_reupgrade_are_clean(db_url: str) -> None:
         from app.repositories.project_repository import create_project
         from app.repositories.user_repository import create_user
 
-        owner = create_user(session, email="mig@example.com", hashed_password="h")
+        owner = create_user(
+            session, email="mig@example.com", username="migger", hashed_password="h"
+        )
         create_project(session, owner_id=owner.id, name="data that must vanish")
         session.commit()
 

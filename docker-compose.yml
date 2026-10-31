@@ -1,0 +1,49 @@
+# Tayf Studio - optional unified local orchestration.
+# This is OPTIONAL and aimed at capable machines (not Termux).
+# Usage:  docker compose up --build
+# Images are official and code is volume-mounted, so nothing is baked in.
+# The backend runs `alembic upgrade head` before serving (migrations-only app).
+
+services:
+  backend:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt &&
+             python -m alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: development
+      JWT_SECRET: "change-me-in-production-0123456789abcdef"
+      DATABASE_URL: "sqlite:///./tayf.db"
+      CORS_ORIGINS: "http://localhost:5173,http://localhost:3000"
+
+  ai-gateway:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./ai-gateway:/app
+    command: sh -c "npm install --no-save && node index.mjs"
+    ports:
+      - "127.0.0.1:3030:3030"
+    environment:
+      AI_GATEWAY_PORT: "3030"
+      AI_GATEWAY_HOST: "0.0.0.0"  # inside the isolated compose network only
+    restart: unless-stopped
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    command: >
+      sh -c "npm install &&
+             npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend

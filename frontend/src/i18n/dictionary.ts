@@ -1,51 +1,234 @@
-/** Bilingual copy for the shell. Real i18n wiring (locale provider) comes in Stage 6. */
+/** Bilingual copy (AR default / EN) — every UI string lives here. */
 
 export type Lang = "ar" | "en";
 
-interface Copy {
+export interface Copy {
+  dir: "rtl" | "ltr";
   brand: string;
   tagline: string;
-  subtitle: string;
-  check: string;
-  checking: string;
-  idle: string;
-  success: string;
-  error: string;
-  lastResponse: string;
+  switchLabel: string;
+
+  // auth
+  loginTitle: string;
+  registerTitle: string;
+  identifier: string;
+  identifierPlaceholder: string;
+  email: string;
+  username: string;
+  password: string;
+  login: string;
+  register: string;
+  haveAccount: string;
+  needAccount: string;
+  authErrorPrefix: string;
+
+  // shell
+  logout: string;
+  balance: string;
+  creditsUnit: string;
+  serverError: string;
+
+  // projects
+  projects: string;
+  newProject: string;
+  projectName: string;
+  projectNamePlaceholder: string;
+  projectDescription: string;
+  projectDescriptionPlaceholder: string;
+  create: string;
+  archive: string;
+  archivedTag: string;
+  showArchived: string;
+  noProjects: string;
+  jobsCount: string;
+  backToProjects: string;
+
+  // jobs
+  newJob: string;
+  promptLabel: string;
+  promptPlaceholder: string;
+  scenes: string;
+  aspect: string;
+  style: string;
+  cost: string;
+  generate: string;
+  generating: string;
+  noJobs: string;
+  jobsTitle: string;
+  simulatedBadge: string;
+  realBadge: string;
+  rejection: string;
+  jobError: string;
+  videoLabel: string;
+  storyboard: string;
+  durationSeconds: string;
+  selectProjectHint: string;
+  insufficient: string;
+
+  // statuses
+  status_pending: string;
+  status_processing: string;
+  status_completed: string;
+  status_failed: string;
+  status_rejected: string;
+  status_cancelled: string;
+
   honestyTitle: string;
   honestyBody: string;
-  switchLabel: string;
 }
 
 export const copy: Record<Lang, Copy> = {
   ar: {
-    brand: "Tayf",
+    dir: "rtl",
+    brand: "طيف",
     tagline: "استوديو توليد الفيديو بالذكاء الاصطناعي",
-    subtitle: "هيكل التطبيق الأولي — المرحلة 2",
-    check: "فحص اتصال الخادم",
-    checking: "جارٍ الفحص…",
-    idle: "لم يتم إجراء فحص بعد",
-    success: "الاتصال بالخادم ناجح",
-    error: "فشل الاتصال بالخادم",
-    lastResponse: "آخر استجابة من الخادم",
-    honestyTitle: "حالة الوظائف",
-    honestyBody:
-      "هذه المرحلة تُثبت الربط بين الواجهة والخادم فقط. لا يوجد حتى الآن توليد فيديو أو حساب مستخدم — أي زر آخر لم يُبنَ بعد.",
     switchLabel: "English",
+
+    loginTitle: "تسجيل الدخول",
+    registerTitle: "حساب جديد",
+    identifier: "البريد الإلكتروني أو اسم المستخدم",
+    identifierPlaceholder: "you@example.com أو username",
+    email: "البريد الإلكتروني",
+    username: "اسم المستخدم",
+    password: "كلمة المرور",
+    login: "دخول",
+    register: "إنشاء الحساب",
+    haveAccount: "لدي حساب بالفعل",
+    needAccount: "ليس لدي حساب",
+    authErrorPrefix: "تعذّر إكمال العملية",
+
+    logout: "خروج",
+    balance: "الرصيد",
+    creditsUnit: "رصيد",
+    serverError: "تعذر الاتصال بالخادم",
+
+    projects: "المشاريع",
+    newProject: "مشروع جديد",
+    projectName: "اسم المشروع",
+    projectNamePlaceholder: "مثال: إعلان مقهى الحرم",
+    projectDescription: "الوصف (اختياري)",
+    projectDescriptionPlaceholder: "فكرة قصيرة عن المشروع",
+    create: "إنشاء",
+    archive: "أرشفة",
+    archivedTag: "مؤرشف",
+    showArchived: "إظهار المؤرشفة",
+    noProjects: "لا مشاريع بعد — أنشئ مشروعك الأول.",
+    jobsCount: "مهمة",
+    backToProjects: "كل المشاريع",
+
+    newJob: "مهمة توليد جديدة",
+    promptLabel: "وصف الفيديو المطلوب",
+    promptPlaceholder:
+      "مثال: لقطة سينمائية بطيئة لمقهى عربي عند الفجر، بخار يتصاعد من فنجان القهوة",
+    scenes: "عدد المشاهد",
+    aspect: "أبعاد الإطار",
+    style: "النمط",
+    cost: "التكلفة",
+    generate: "توليد",
+    generating: "جارٍ الإرسال…",
+    noJobs: "لا مهام بعد في هذا المشروع.",
+    jobsTitle: "المهام",
+    simulatedBadge: "محاكاة — ليس توليدًا حقيقيًا",
+    realBadge: "توليد حقيقي",
+    rejection: "سبب الرفض",
+    jobError: "سبب الفشل (رُدّ الرصيد)",
+    videoLabel: "الفيديو الناتج",
+    storyboard: "اللوحة القصصية",
+    durationSeconds: "ث",
+    selectProjectHint: "اختر مشروعًا من القائمة لعرض مهامه وإنشاء مهمة جديدة.",
+    insufficient: "الرصيد غير كافٍ — كل مشهد يكلف رصيدًا واحدًا",
+
+    status_pending: "في الانتظار",
+    status_processing: "قيد التنفيذ",
+    status_completed: "مكتملة",
+    status_failed: "فاشلة",
+    status_rejected: "مرفوضة",
+    status_cancelled: "ملغاة",
+
+    honestyTitle: "ما الذي يعمل فعلًا؟",
+    honestyBody:
+      "كل شيء هنا حقيقي: حسابات بـ Argon2id، رصيد قابل للتدقيق، تخزين فعلي، وتجميع MP4 بـ ffmpeg. المزود الافتراضي (mock) ينتج لوحات ومؤثرات وهمية موسومة بوضوح بـ SIMULATED. لتفعيل التوليد الحقيقي شغّل بوابة ai-gateway أو اضبط مزودًا متوافقًا مع OpenAI في ‎.env.",
   },
   en: {
+    dir: "ltr",
     brand: "Tayf",
     tagline: "AI video generation studio",
-    subtitle: "Application skeleton — Stage 2",
-    check: "Check server connection",
-    checking: "Checking…",
-    idle: "No check performed yet",
-    success: "Server connection succeeded",
-    error: "Server connection failed",
-    lastResponse: "Last server response",
+    switchLabel: "العربية",
+
+    loginTitle: "Sign in",
+    registerTitle: "Create account",
+    identifier: "Email or username",
+    identifierPlaceholder: "you@example.com or username",
+    email: "Email",
+    username: "Username",
+    password: "Password",
+    login: "Sign in",
+    register: "Create account",
+    haveAccount: "I already have an account",
+    needAccount: "I need an account",
+    authErrorPrefix: "The request failed",
+
+    logout: "Sign out",
+    balance: "Balance",
+    creditsUnit: "credits",
+    serverError: "Cannot reach the server",
+
+    projects: "Projects",
+    newProject: "New project",
+    projectName: "Project name",
+    projectNamePlaceholder: "e.g. Café dawn commercial",
+    projectDescription: "Description (optional)",
+    projectDescriptionPlaceholder: "A short idea for this project",
+    create: "Create",
+    archive: "Archive",
+    archivedTag: "archived",
+    showArchived: "Show archived",
+    noProjects: "No projects yet — create your first one.",
+    jobsCount: "jobs",
+    backToProjects: "All projects",
+
+    newJob: "New generation job",
+    promptLabel: "Describe the video you want",
+    promptPlaceholder:
+      "e.g. slow cinematic shot of an Arabic café at dawn, steam rising from the coffee cup",
+    scenes: "Scenes",
+    aspect: "Aspect",
+    style: "Style",
+    cost: "Cost",
+    generate: "Generate",
+    generating: "Submitting…",
+    noJobs: "No jobs in this project yet.",
+    jobsTitle: "Jobs",
+    simulatedBadge: "SIMULATED — not real AI output",
+    realBadge: "Real generation",
+    rejection: "Rejection reason",
+    jobError: "Failure reason (credits refunded)",
+    videoLabel: "Resulting video",
+    storyboard: "Storyboard",
+    durationSeconds: "s",
+    selectProjectHint: "Pick a project from the list to view its jobs and create a new one.",
+    insufficient: "Insufficient balance — each scene costs 1 credit",
+
+    status_pending: "Pending",
+    status_processing: "Processing",
+    status_completed: "Completed",
+    status_failed: "Failed",
+    status_rejected: "Rejected",
+    status_cancelled: "Cancelled",
+
     honestyTitle: "What actually works",
     honestyBody:
-      "This stage only proves the frontend ↔ backend wiring. There is no video generation and no user account yet — nothing else has been built.",
-    switchLabel: "العربية",
+      "Everything here is real: Argon2id accounts, an auditable credit ledger, real storage and real MP4 composition via ffmpeg. The default provider (mock) fabricates storyboards and keyframes clearly stamped SIMULATED. To enable real generation, run the ai-gateway sidecar or configure an OpenAI-compatible provider in .env.",
   },
 };
+
+export const STYLES = [
+  "cinematic",
+  "anime",
+  "3d_render",
+  "watercolor",
+  "photorealistic",
+  "noir",
+] as const;
+
+export const ASPECTS = ["16:9", "9:16", "1:1"] as const;

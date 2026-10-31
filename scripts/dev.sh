@@ -5,8 +5,9 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="${TMPDIR:-/tmp}"
-API_LOG="$TMP/vf-api.log"
-WEB_LOG="$TMP/vf-vite.log"
+API_LOG="$TMP/tayf-api.log"
+WEB_LOG="$TMP/tayf-vite.log"
+GATEWAY_LOG="$TMP/tayf-gateway.log"
 API_PORT="${API_PORT:-8000}"
 WEB_PORT="${WEB_PORT:-5173}"
 
@@ -23,10 +24,15 @@ wait_for() { # port label seconds
 
 migrate() {
   echo "→ alembic upgrade head"
-  ( cd "$ROOT/backend" && alembic upgrade head 2>&1 | tail -3 )
+  ( cd "$ROOT/backend" && "${PYTHON_BIN:-python}" -m alembic upgrade head 2>&1 | tail -3 )
 }
 
 start() {
+  # Guard against unusable DATABASE_URL values leaked into the environment
+  # (seen on some CI/sandbox platforms) — the honest SQLite default wins.
+  case "${DATABASE_URL:-}" in
+    ""|file:*) export DATABASE_URL="sqlite:///$ROOT/backend/tayf.db" ;;
+  esac
   migrate
   if port_busy "$API_PORT"; then echo "API already on :$API_PORT"; else
     ( cd "$ROOT/backend" && setsid --fork python -m uvicorn app.main:app \
@@ -57,11 +63,20 @@ status() {
   port_busy "$WEB_PORT" && echo "  frontend :$WEB_PORT  UP" || echo "  frontend :$WEB_PORT  down"
 }
 
+gateway() {
+  if port_busy 3030; then echo "gateway already on :3030"; else
+    ( cd "$ROOT/ai-gateway" && setsid --fork node index.mjs </dev/null >"$GATEWAY_LOG" 2>&1 )
+    wait_for 3030 "ai-gateway" || { tail -20 "$GATEWAY_LOG"; exit 1; }
+  fi
+  echo "  Real AI gateway :3030 (set AI_PROVIDER=zai_gateway in backend/.env to use it)"
+}
+
 case "${1:-start}" in
   start) start ;;
+  gateway) gateway ;;
   migrate) migrate ;;
   stop) stop ;;
   status) status ;;
-  logs) tail -n "${2:-30}" "$API_LOG" "$WEB_LOG" 2>/dev/null ;;
-  *) echo "usage: $0 start|stop|status|migrate|logs [n]" >&2; exit 2 ;;
+  logs) tail -n "${2:-30}" "$API_LOG" "$WEB_LOG" "$GATEWAY_LOG" 2>/dev/null ;;
+  *) echo "usage: $0 start|gateway|stop|status|migrate|logs [n]" >&2; exit 2 ;;
 esac

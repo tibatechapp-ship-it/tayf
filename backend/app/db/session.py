@@ -1,8 +1,8 @@
 """Engine + session factory.
 
 SQLite is the development database; the same code runs on PostgreSQL because
-nothing below is engine-specific apart from the connect-time PRAGMA (which only
-fires for SQLite connections).
+nothing below is engine-specific apart from the connect-time PRAGMAs (which
+only fire for SQLite connections).
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.core.config import get_settings
+from app.core.config import settings
 
 
 def make_engine(url: str, *, echo: bool = False) -> Engine:
@@ -20,16 +20,28 @@ def make_engine(url: str, *, echo: bool = False) -> Engine:
     if url.startswith("sqlite"):
         # One file, many threads (uvicorn); SQLite needs this off-thread guard.
         kwargs["connect_args"] = {"check_same_thread": False}
-    return create_engine(url, **kwargs)
+    try:
+        return create_engine(url, **kwargs)
+    except Exception as exc:  # e.g. an unusable DATABASE_URL leaked into the env
+        raise RuntimeError(
+            f"Cannot create a database engine for DATABASE_URL={url!r}. "
+            "Expected something like 'sqlite:///./tayf.db' or "
+            "'postgresql+psycopg://user:pass@host/db'. Original error: "
+            f"{exc}"
+        ) from exc
 
 
 @event.listens_for(Engine, "connect")
-def _enable_sqlite_foreign_keys(dbapi_connection, _record) -> None:
-    """SQLite ignores FK constraints unless asked — ON DELETE CASCADE needs this."""
+def _enable_sqlite_pragmas(dbapi_connection, _record) -> None:
+    """SQLite ignores FK constraints unless asked — ON DELETE CASCADE needs this.
+
+    WAL mode keeps concurrent reads flowing while background jobs write.
+    """
     if type(dbapi_connection).__module__.split(".")[0] != "sqlite3":
         return
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA journal_mode=WAL")
     cursor.close()
 
 
@@ -37,12 +49,11 @@ def make_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
-_settings = get_settings()
-engine: Engine = make_engine(_settings.database_url, echo=_settings.db_echo)
+engine: Engine = make_engine(settings.DATABASE_URL, echo=settings.DB_ECHO)
 SessionLocal = make_session_factory(engine)
 
 
 def get_session() -> Iterator[Session]:
-    """FastAPI dependency for Stage 4 (one session per request)."""
+    """FastAPI dependency: one session per request."""
     with SessionLocal() as session:
         yield session

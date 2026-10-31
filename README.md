@@ -1,135 +1,168 @@
-# Tayf Studio
+<div align="center">
 
-**AI video generation studio — Arabic-first (AR/EN).** Describe a scene, get a
-real storyboard, real keyframes, and a real MP4 — with an auditable credit
-system and a safety layer. Built stage by stage, with the proof for every stage
-recorded in `TASK_TRACKER.md`.
+# طيف — Tayf Studio
 
-**Status: Unified Studio (v0.4).** The VisionForge feature line merged into the
-Tayf data model: real auth, credits, storage, safety, provider abstraction and
-a full generation pipeline. Nothing here pretends — mock output is stamped
-`SIMULATED`, real providers are flagged real, failures refund your credits.
+**استوديو توليد الفيديو بالذكاء الاصطناعي — عربي أولًا، شفافية مطلقة، يعمل حتى على هاتفك.**
 
-[![CI](https://github.com/tibatechapp-ship-it/tayf/actions/workflows/ci.yml/badge.svg)](https://github.com/tibatechapp-ship-it/tayf/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+AI video generation studio — Arabic-first (AR/EN), self-hostable, radically honest.
+Describe a scene → get a storyboard, keyframes and a real MP4 — with an auditable
+credit system and content-safety screening.
+
+[![CI](https://github.com/tibatechapp-ship-it/tayf/actions/workflows/ci.yml/badge.svg)](https://github.com/tibatechapp-ship-it/tayf/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](backend/requirements.txt)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green.svg)](https://fastapi.tiangolo.com)
+[![React 19](https://img.shields.io/badge/React-19-61dafb.svg)](frontend/package.json)
+[![Tests](https://img.shields.io/badge/tests-99%20passing-3fb950.svg)](backend/tests)
+
+</div>
+
+![Studio UI](docs/ui-unified.png)
 
 ---
 
-## What actually works (all verified by real tests)
+## لماذا طيف؟
 
-| Piece | Evidence |
+| | |
 |---|---|
-| Register / login / me — Argon2id + JWT | `tests/test_auth.py` |
-| Projects CRUD with ownership isolation (404, never 403) | `tests/test_api_projects.py`, `tests/test_project_crud.py` |
-| Jobs: safety screen → credits → background pipeline | `tests/test_jobs…` via `test_pipeline.py` |
-| Real MP4 composition (ffmpeg: zoompan + xfade + watermark) | `tests/test_compose.py` (real `ftyp` MP4s) |
-| Credits: append-only ledger, signup bonus, refunds | `tests/test_credits.py` |
-| Storage: local filesystem or any S3-compatible store + TTL cleanup | `tests/test_storage.py`, `tests/test_files.py` |
-| Content safety: pre/post generation screening | `tests/test_safety.py` |
-| Migrations: upgrade / downgrade / model-drift guard | `tests/test_migrations.py` |
-| **Backend suite** | `pytest` → **95 passed** |
-| Frontend: React 19 + Vite 8 + TS strict | `npm run build` clean |
-| **Browser E2E**: register → project → job → completed video | `scripts/e2e_smoke.py` → `RESULT: PASS`, 0 JS errors |
-| **Real AI generation** (LLM storyboard + real keyframes + MP4) | see `docs/AI_PROVIDERS.md` — `simulated=false` artifacts archived |
+| **شفافية مطلقة** | كل مخرج محاكاة موسوم `SIMULATED` من قاعدة البيانات حتى شارة الواجهة وختم الصورة — لا نجاح مزيف إطلاقًا، والفشل **يُرجع رصيدك تلقائيًا**. |
+| **عربي أولًا** | واجهة RTL أصلية (لا ترجمة مُلصقة)، موجّهات ومحتوى عربي، i18n عربي/إنجليزي. |
+| **خفيف بلا رحمة** | يعمل على Termux/هاتف وجهاز ضعيف: `uvicorn` عادي، SQLite افتراضيًا، صفر أطر CSS ثقيلة. |
+| **ملكية كاملة** | ذاتي الاستضافة بالكامل؛ بياناتك لا تغادر سيطرتك. PostgreSQL بنقلة إعداد واحدة. |
 
-## Requirements
+## ما الذي يعمل فعلًا (كل سطر خلفه اختبار)
 
-- Python 3.11+ — `pip install -r backend/requirements-dev.txt`
-  - **Termux:** plain `uvicorn` (no uvloop); `pkg install ffmpeg` is required
-    for video composition; if `argon2-cffi`/`pillow` fail to build:
-    `pkg install clang python-pillow`
-- Node 20+ — TypeScript pinned to 5.x (TS 7 has no android-arm64 build)
-- No Postgres needed: the default `DATABASE_URL` is SQLite.
+| الجزء | الدليل |
+|---|---|
+| تسجيل/دخول/جلسة — Argon2id + JWT | `tests/test_auth.py` |
+| مشاريع CRUD بعزل ملكية (404 لا 403) | `tests/test_api_projects.py`, `tests/test_project_crud.py` |
+| مهام: فلترة أمان ← خصم رصيد ← خط إنتاج خلفي | `tests/test_pipeline.py` |
+| تجميع MP4 حقيقي (ffmpeg: zoompan + xfade + علامة مائية) | `tests/test_compose.py` |
+| رصيد: دفتر غير قابل للتعديل + مكافأة تسجيل + ردود فشل | `tests/test_credits.py` |
+| تخزين محلي أو S3 متوافق + تنظيف TTL | `tests/test_storage.py`, `tests/test_files.py` |
+| أمان محتوى قبل/بعد التوليد | `tests/test_safety.py` |
+| هجرات مزدوجة الاتجاه + حراسة انحراف المخطط | `tests/test_migrations.py` |
+| رؤوس أمنية + `X-Request-ID` + نقطة `/version` | `tests/test_system.py` |
+| **المجموعة الكاملة** | `pytest` → **99 ناجحًا** |
+| واجهة React 19 + Vite 8 + TS صارم | `npm run build` نظيف |
+| **E2E متصفح حقيقي**: تسجيل ← مشروع ← مهمة ← فيديو مكتمل | `scripts/e2e_smoke.py` → `RESULT: PASS`, 0 أخطاء JS |
+| **توليد AI حقيقي** (لوحة قصصية + إطارات + MP4) | `docs/AI_PROVIDERS.md` — مخرجات `simulated=false` مؤرشفة |
 
-## Run
+## التشغيل السريع
 
 ```bash
-cp .env.example .env            # optional; defaults work
+cp .env.example .env            # اختياري؛ الإعدادات الافتراضية تعمل
 ./scripts/dev.sh start          # alembic upgrade head + API :8000 + UI :5173
 ./scripts/dev.sh status
 ```
 
-Open <http://127.0.0.1:5173>, create an account (you get 100 credits), create
-a project, and generate. The default `mock` provider works with zero keys and
-every artifact is clearly marked SIMULATED.
+افتح <http://127.0.0.1:5173>، أنشئ حسابًا (تحصل على 100 رصيد)، أنشئ مشروعًا،
+وولّد. المزود الافتراضي `mock` يعمل بلا أي مفاتيح وكل مخرجاته موسومة بوضوح.
 
-### Real generation (two options)
+### التوليد الحقيقي (خياران)
 
 ```bash
-# Option A: the bundled gateway sidecar (real LLM + real image model)
-./scripts/dev.sh gateway        # sidecar on 127.0.0.1:3030
-# then set in .env:  AI_PROVIDER=zai_gateway
+# الخيار أ: البوابة الجانبية المرفقة (LLM حقيقي + نموذج صور حقيقي)
+./scripts/dev.sh gateway        # sidecar على 127.0.0.1:3030
+# ثم في .env:  AI_PROVIDER=zai_gateway
 
-# Option B: bring your own key (any OpenAI-compatible API)
+# الخيار ب: مفتاحك الخاص (أي API متوافق مع OpenAI)
 #   AI_PROVIDER=openai_compatible
 #   OPENAI_BASE_URL=...  OPENAI_API_KEY=...
 ```
 
-Details and the honesty matrix: `docs/AI_PROVIDERS.md`.
+التفاصيل ومصفوفة الصدق: `docs/AI_PROVIDERS.md`.
 
-## Verify (what the tracker cites)
+## التحقق (ما يستشهد به المتتبع)
 
 ```bash
-cd backend && python -m pytest -v          # 95 passed
-cd frontend && npm run build               # typecheck + bundle
-./scripts/run_e2e.sh                       # full browser loop -> RESULT: PASS
+cd backend && python -m pytest -q            # 99 passed
+cd frontend && npm run build                 # typecheck + bundle
+./scripts/run_e2e.sh                         # دورة متصفح كاملة → RESULT: PASS
 
-# schema proof
+# إثبات المخطط
 cd backend && alembic upgrade head && alembic downgrade base && alembic upgrade head
 ```
 
-## Switching to PostgreSQL
+## واجهة API
 
-The schema is engine-neutral (`sa.Uuid`, `sa.JSON`, VARCHAR+CHECK enums):
+| Method | Path | الحالة |
+|---|---|---|
+| GET | `/api/v1/health` | منفذة |
+| GET | `/api/v1/version` (نسخة + بيئة + مزود) | منفذة |
+| POST | `/api/v1/auth/register` → `201` توكن + 100 رصيد | منفذة |
+| POST | `/api/v1/auth/login` → `200` توكن | منفذة |
+| GET | `/api/v1/auth/me` | منفذة (JWT) |
+| GET/POST | `/api/v1/projects` | منفذة (JWT) |
+| GET/PATCH/DELETE | `/api/v1/projects/{id}` | منفذة (الحذف = أرشفة) |
+| POST | `/api/v1/projects/{id}/jobs` → `202` | منفذة (`402` عند نقص الرصيد) |
+| GET | `/api/v1/projects/{id}/jobs`, `/api/v1/jobs/{id}` | منفذة |
+| GET | `/api/v1/credits/me` | منفذة (رصيد + دفتر) |
+| GET | `/api/v1/files/{key}` | منفذة (خدمة محلية / presign لـ S3) |
+| GET | `/docs`, `/openapi.json` | منفذة (FastAPI) |
+
+كل الاستجابات تحمل رؤوسًا دفاعية (`nosniff`, `DENY`, `no-referrer`) و`X-Request-ID`.
+
+## البنية
+
+```
+backend/app/
+  main.py                 تطبيق FastAPI + دورة تنظيف TTL + وسائط أمنية
+  api/deps.py             تبعية JWT bearer
+  api/v1/endpoints/       auth, projects, jobs, credits, files
+  core/                   config (.env), security (Argon2id+JWT), safety, middleware
+  db/session.py           مصنع المحرك، SQLite FK+WAL pragmas
+  models/                 Base + mixins, User, Project, GenerationJob, CreditLedger
+  repositories/           user, project, job (الملكية مفروضة على مستوى الاستعلام)
+  schemas/                عقود pydantic السلكية
+  services/ai/            عقد أساسي + mock | zai_gateway | openai_compatible
+  services/               credits (دفتر), pipeline, compose (ffmpeg)
+  services/storage/       base + local + s3 + factory, تنظيف TTL
+  migrations/             Alembic: a347dd0c8c67 → c3d9e5f81a42
+ai-gateway/               بوابة Node جانبية: LLM حقيقي + نموذج صور (localhost فقط)
+frontend/src/             React 19 + Vite 8، i18n عربي/إنجليزي، واجهة داكنة RTL أولًا
+scripts/                  dev.sh (start/gateway/stop/status), run_e2e.sh, e2e_smoke.py
+docs/                     ARCHITECTURE, DATA_MODEL, AI_PROVIDERS, ENGINEERING_REVIEW
+```
+
+## النشر
+
+**Docker:** `docker-compose.yml` جاهز للرفع.
+**Termux:** `pkg install ffmpeg` مطلوب للتجميع؛ `uvicorn` العادي فقط (لا uvloop)؛
+إن فشل بناء `argon2-cffi`/`pillow`: `pkg install clang python-pillow`.
+**PostgreSQL:** المخطط محايد للمحرك:
 
 ```bash
 # .env
 DATABASE_URL=postgresql+psycopg://tayf:secret@localhost:5432/tayf
-pip install "psycopg[binary]"
-cd backend && alembic upgrade head
+pip install "psycopg[binary]" && cd backend && alembic upgrade head
 ```
 
-## API
+## خارطة الطريق
 
-| Method | Path | Status |
-|---|---|---|
-| GET | `/api/v1/health` | implemented |
-| POST | `/api/v1/auth/register` → `201` token + 100 credits | implemented |
-| POST | `/api/v1/auth/login` → `200` token | implemented |
-| GET | `/api/v1/auth/me` | implemented (JWT) |
-| GET/POST | `/api/v1/projects` | implemented (JWT) |
-| GET/PATCH/DELETE | `/api/v1/projects/{id}` | implemented (DELETE = archive) |
-| POST | `/api/v1/projects/{id}/jobs` → `202` | implemented (402 on low balance) |
-| GET | `/api/v1/projects/{id}/jobs`, `/api/v1/jobs/{id}` | implemented |
-| GET | `/api/v1/credits/me` | implemented (balance + ledger) |
-| GET | `/api/v1/files/{key}` | implemented (local serve / S3 presign) |
-| GET | `/docs`, `/openapi.json` | implemented (FastAPI) |
+الأولويات القادمة (TTS عربي، طابور مهام، مراقبة، معاينة مشاهد…) موثقة بمنهجية
+وفي مصفوفة تنافسية كاملة في **[docs/ENGINEERING_REVIEW.md](docs/ENGINEERING_REVIEW.md)**.
 
-## Layout
+## الوثائق
 
-```
-backend/app/
-  main.py                 FastAPI app + TTL cleanup lifespan
-  api/deps.py             JWT bearer dependency
-  api/v1/endpoints/       auth, projects, jobs, credits, files
-  core/                   config (.env), security (Argon2id+JWT), safety
-  db/session.py           engine factory, SQLite FK+WAL pragmas
-  models/                 Base + mixins, User, Project, GenerationJob, CreditLedger
-  repositories/           user, project, job (ownership enforced at query level)
-  schemas/                pydantic wire contracts
-  services/ai/            base contract + mock | zai_gateway | openai_compatible
-  services/               credits (ledger), pipeline, compose (ffmpeg)
-  services/storage/       base + local + s3 + factory, TTL cleanup
-  migrations/             Alembic: a347dd0c8c67 -> c3d9e5f81a42
-ai-gateway/               Node sidecar: real LLM + real image model (localhost only)
-frontend/src/             React 19 + Vite 8, AR/EN i18n, RTL-first dark UI
-scripts/                  dev.sh (start/gateway/stop/status), run_e2e.sh, e2e_smoke.py
-docs/                     ARCHITECTURE, DATA_MODEL, AI_PROVIDERS, AUDIT_PHASE_0
-```
+`ARCHITECTURE.md` · `DATA_MODEL.md` · `AI_PROVIDERS.md` · `ENGINEERING_REVIEW.md` · `CHANGELOG.md` · `CONTRIBUTING.md`
 
-## Non-negotiable rules (inherited from the project charter)
+## القواعد غير القابلة للتفاوض
 
-1. No fabricated success — every claim above has a test or artifact behind it.
-2. Simulated output is **always labeled** (`simulated=true` → UI badge + stamp).
-3. Secrets live only in `.env` (never committed); production requires `JWT_SECRET`.
-4. Runs on Termux/low-resource machines — no compiled-only deps, plain uvicorn.
-5. `TASK_TRACKER.md` is the single source of truth for status.
+1. لا نجاح مزيف — لكل ادعاء أعلاه اختبار أو أثر يثبته.
+2. المخرجات المحاكاة **موسومة دائمًا** (`simulated=true` → شارة واجهة + ختم).
+3. الأسرار في `.env` فقط (لا تدخل المستودع أبدًا)؛ الإنتاج يتطلب `JWT_SECRET`.
+4. يعمل على Termux/الأجهزة ضعيفة الموارد — بلا اعتماديات مُجمَّعة إجبارية.
+5. `TASK_TRACKER.md` هو المصدر الوحيد للحقيقة.
+
+## License
+
+[MIT](LICENSE)
+
+---
+
+<div align="center"><em>English summary: self-hosted, Arabic-first AI video studio —
+real auth (Argon2id+JWT), auditable credits with automatic refunds, content-safety
+screening, pluggable AI providers (mock / gateway / OpenAI-compatible), local or S3
+storage with TTL cleanup, real ffmpeg MP4 composition. 99 passing tests, browser E2E
+proven, runs on a phone. See the table above for test-backed features.</em></div>

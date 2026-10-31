@@ -1,15 +1,20 @@
-"""Health + version endpoints — the contract the frontend uses to prove connectivity."""
+"""Health, version + metrics endpoints.
+
+``/metrics`` exposes aggregate Prometheus counters (no user data, no
+identifiers). Disable with ``METRICS_ENABLED=false`` — the route then 404s.
+"""
 
 import sys
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 from pydantic import BaseModel
 
 from app.core.config import get_settings
+from app.core.metrics import REGISTRY
 
 # Single source of truth for the product version (FastAPI app + /version).
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.5.0"
 
 router = APIRouter(tags=["health"])
 
@@ -55,4 +60,20 @@ def version() -> VersionResponse:
         storage_backend=settings.STORAGE_BACKEND,
         ai_provider=settings.AI_PROVIDER,
         timestamp=datetime.now(timezone.utc),
+    )
+
+
+@router.get(
+    "/metrics",
+    summary="Prometheus counters (aggregate, no user data)",
+    responses={404: {"description": "Metrics disabled via METRICS_ENABLED=false"}},
+)
+def metrics() -> Response:
+    if not get_settings().METRICS_ENABLED:
+        from fastapi import HTTPException, status
+
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="المقاييس معطّلة")
+    return Response(
+        content=REGISTRY.render(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
     )

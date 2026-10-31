@@ -14,11 +14,18 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.config import get_settings
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.ratelimit import auth_rate_limit
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
+    hash_password,
+    verify_password,
+)
 from app.db.session import get_session
 from app.models import User
 from app.repositories import user_repository
-from app.schemas.auth import LoginIn, MeOut, RegisterIn, TokenOut, UserOut
+from app.schemas.auth import LoginIn, MeOut, RefreshIn, RegisterIn, TokenOut, UserOut
 from app.services import credits
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -27,6 +34,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def _token_response(db: Session, user: User) -> TokenOut:
     return TokenOut(
         access_token=create_access_token(user.id),
+        refresh_token=create_refresh_token(user.id),
         token_type="bearer",
         user=UserOut.model_validate(user),
         balance=credits.balance_of(db, user.id),
@@ -36,7 +44,11 @@ def _token_response(db: Session, user: User) -> TokenOut:
 @router.post(
     "/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED
 )
-def register(payload: RegisterIn, db: Session = Depends(get_session)) -> TokenOut:
+def register(
+    payload: RegisterIn,
+    db: Session = Depends(get_session),
+    _rl: None = Depends(auth_rate_limit),
+) -> TokenOut:
     settings = get_settings()
     existing = user_repository.get_by_email(db, payload.email)
     if existing is None:
@@ -72,7 +84,11 @@ def register(payload: RegisterIn, db: Session = Depends(get_session)) -> TokenOu
 
 
 @router.post("/login", response_model=TokenOut)
-def login(payload: LoginIn, db: Session = Depends(get_session)) -> TokenOut:
+def login(
+    payload: LoginIn,
+    db: Session = Depends(get_session),
+    _rl: None = Depends(auth_rate_limit),
+) -> TokenOut:
     user = user_repository.get_by_login(db, payload.username_or_email)
     if user is None or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
@@ -82,6 +98,25 @@ def login(payload: LoginIn, db: Session = Depends(get_session)) -> TokenOut:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="الحساب معطّل")
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
+    return _token_response(db, user)
+
+
+@router.post("/refresh", response_model=TokenOut, summary="Rotate access + refresh tokens")
+def refresh(
+    payload: RefreshIn,
+    db: Session = Depends(get_session),
+    _rl: None = Depends(auth_rate_limit),
+) -> TokenOut:
+    user_id = decode_refresh_token(payload.refresh_token)
+    if user_id is None:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, detail="رمز التحديث غير صالح أو منتهٍ"
+        )
+    user = db.get(User, user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, detail="رمز التحديث غير صالح أو منتهٍ"
+        )
     return _token_response(db, user)
 
 

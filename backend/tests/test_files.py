@@ -1,36 +1,56 @@
-"""Files route: content types + traversal rejection at the HTTP boundary."""
+"""Files route: content types, signed-URL enforcement + traversal rejection."""
 
 import time
 
 from fastapi.testclient import TestClient
 
-from app.core.config import get_settings
+from app.core.file_tokens import extract_signed_key, sign_file_url, verify_file_token
 from app.services.storage.factory import get_storage
 
 
 def test_files_serve_correct_content_types(client: TestClient):
     storage = get_storage()
-    settings = get_settings()
 
     png = storage.put_bytes("route_tests/pic.png", b"\x89PNG\r\n\x1a\n" + b"0" * 64, "image/png")
     mp4 = storage.put_bytes("route_tests/clip.mp4", b"\x00\x00\x00 ftypisom" + b"0" * 64, "video/mp4")
 
-    response = client.get(png)
+    response = client.get(sign_file_url(png))
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
 
-    response = client.get(mp4)
+    response = client.get(sign_file_url(mp4))
     assert response.status_code == 200
     assert response.headers["content-type"] == "video/mp4"
 
-    missing = client.get("/api/v1/files/route_tests/nope.png")
-    assert missing.status_code == 404
+    signed_missing = sign_file_url("/api/v1/files/route_tests/nope.png")
+    assert client.get(signed_missing).status_code == 404
 
     # traversal never escapes the storage root
     traversed = client.get("/api/v1/files/../secret.txt")
-    assert traversed.status_code in (400, 404)
+    assert traversed.status_code in (400, 403, 404)
 
-    _ = settings  # settings import kept meaningful for auth-on-files decisions
+
+def test_unsigned_file_url_rejected(client):
+    storage = get_storage()
+    png = storage.put_bytes("route_tests/locked.png", b"\x89PNG\r\n\x1a\n" + b"1" * 64, "image/png")
+    assert png.startswith("/api/v1/files/")
+
+    # no signature -> 403 (capability required, not just a guessable UUID)
+    assert client.get(png).status_code == 403
+    # garbage signature -> 403
+    assert client.get(f"{png}?exp=9999999999&sig=deadbeef").status_code == 403
+
+
+def test_signed_url_roundtrip_and_expiry_window(client):
+    storage = get_storage()
+    png = storage.put_bytes("route_tests/signed.png", b"\x89PNG\r\n\x1a\n" + b"2" * 64, "image/png")
+    signed = sign_file_url(png, ttl_seconds=60)
+    assert "exp=" in signed and "sig=" in signed
+    key, exp, sig = extract_signed_key(signed)
+    assert verify_file_token(key, exp, sig) is True
+    assert client.get(signed).status_code == 200
+    # an expired token fails verification
+    assert verify_file_token(key, "1", sig) is False
 
 
 def test_files_serve_keyframes_from_a_completed_job(client, auth_headers, project_id):

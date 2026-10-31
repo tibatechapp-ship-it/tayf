@@ -20,9 +20,9 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
+from app.core.metrics import record_job_terminal
 from app.core.safety import get_safety_layer
 from app.models import GenerationJob, GenerationStatus, Project
-from app.services.ai.base import ProviderError
 from app.services.ai.factory import get_ai_provider
 from app.services.compose import ComposerError, compose_video
 from app.services.credits import refund
@@ -34,7 +34,7 @@ def _now():
 
 
 def _fail(db: Session, job: GenerationJob, message: str, category: str | None = None) -> None:
-    """Mark FAILED + refund (idempotent: only refunds once)."""
+    """Mark FAILED + refund (idempotent: only refunds once, never over CANCELLED)."""
     job = db.get(GenerationJob, job.id)
     if job is None or job.status in GenerationStatus.terminal():
         return
@@ -47,6 +47,16 @@ def _fail(db: Session, job: GenerationJob, message: str, category: str | None = 
         refund(db, project.owner_id, job.credits_charged, job_id=job.id)
         job.credits_charged = 0
     db.commit()
+    record_job_terminal(GenerationStatus.FAILED.value)
+
+
+def _cancelled(db: Session, job: GenerationJob) -> bool:
+    """Cooperative cancellation check — re-reads the row so a cancel request
+    from another session (the API process) is visible between pipeline stages."""
+    fresh = db.get(GenerationJob, job.id)
+    if fresh is not None and fresh.status == GenerationStatus.CANCELLED:
+        return True
+    return False
 
 
 async def run_job_pipeline(job_id: str | UUID) -> None:
@@ -73,6 +83,8 @@ async def run_job_pipeline(job_id: str | UUID) -> None:
             storyboard = await provider.generate_storyboard(job.prompt, job.num_scenes, job.style)
         except Exception as exc:
             _fail(db, job, f"storyboard failed: {exc}")
+            return
+        if _cancelled(db, job):  # user cancelled while the storyboard was generating
             return
 
         # ---- 2) safety screen the AI-produced text as well ----
@@ -103,6 +115,8 @@ async def run_job_pipeline(job_id: str | UUID) -> None:
         frames: list[tuple[bytes, float]] = []
         try:
             for scene in storyboard.scenes:
+                if _cancelled(db, job):  # between keyframes: stop spending money
+                    return
                 keyframe = await provider.generate_keyframe(scene.image_prompt, job.aspect)
                 key = f"jobs/{job.id}/scene_{scene.index}.{keyframe.extension}"
                 scenes_payload[scene.index - 1]["image_url"] = storage.put_bytes(
@@ -124,6 +138,8 @@ async def run_job_pipeline(job_id: str | UUID) -> None:
         except ComposerError as exc:
             _fail(db, job, f"composition failed: {exc}")
             return
+        if _cancelled(db, job):  # cancelled while ffmpeg was running
+            return
 
         # ---- 5) post-generation safety + store artifacts ----
         verdict = safety.check_artifact(len(result.video_bytes))
@@ -144,6 +160,7 @@ async def run_job_pipeline(job_id: str | UUID) -> None:
         job.status = GenerationStatus.COMPLETED
         job.completed_at = _now()
         db.commit()
+        record_job_terminal(GenerationStatus.COMPLETED.value)
         print(
             f"[pipeline] job {job_id} completed ({result.duration_seconds}s, "
             f"{len(result.video_bytes)} bytes, provider={provider.name}, "

@@ -65,6 +65,17 @@ export interface Copy {
   selectProjectHint: string;
   insufficient: string;
 
+  // ledger + cancellation
+  ledgerTitle: string;
+  ledgerEmpty: string;
+  ledgerSignup: string;
+  ledgerCharge: string;
+  ledgerRefundFailed: string;
+  ledgerRefundCancelled: string;
+  ledgerOther: string;
+  cancel: string;
+  cancelling: string;
+
   // statuses
   status_pending: string;
   status_processing: string;
@@ -142,6 +153,16 @@ export const copy: Record<Lang, Copy> = {
     selectProjectHint: "اختر مشروعًا من القائمة لعرض مهامه وإنشاء مهمة جديدة.",
     insufficient: "الرصيد غير كافٍ — كل مشهد يكلف رصيدًا واحدًا",
 
+    ledgerTitle: "دفتر الرصيد",
+    ledgerEmpty: "لا حركات بعد.",
+    ledgerSignup: "مكافأة التسجيل",
+    ledgerCharge: "تكلفة توليد",
+    ledgerRefundFailed: "استرداد (فشل)",
+    ledgerRefundCancelled: "استرداد (إلغاء)",
+    ledgerOther: "حركة أخرى",
+    cancel: "إلغاء",
+    cancelling: "جارٍ الإلغاء…",
+
     status_pending: "في الانتظار",
     status_processing: "قيد التنفيذ",
     status_completed: "مكتملة",
@@ -217,6 +238,16 @@ export const copy: Record<Lang, Copy> = {
     durationSeconds: "s",
     selectProjectHint: "Pick a project from the list to view its jobs and create a new one.",
     insufficient: "Insufficient balance — each scene costs 1 credit",
+
+    ledgerTitle: "Credit ledger",
+    ledgerEmpty: "No movements yet.",
+    ledgerSignup: "Signup bonus",
+    ledgerCharge: "Generation charge",
+    ledgerRefundFailed: "Refund (failure)",
+    ledgerRefundCancelled: "Refund (cancellation)",
+    ledgerOther: "Other movement",
+    cancel: "Cancel",
+    cancelling: "Cancelling…",
 
     status_pending: "Pending",
     status_processing: "Processing",

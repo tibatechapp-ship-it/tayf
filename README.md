@@ -13,7 +13,7 @@ credit system and content-safety screening.
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](backend/requirements.txt)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green.svg)](https://fastapi.tiangolo.com)
 [![React 19](https://img.shields.io/badge/React-19-61dafb.svg)](frontend/package.json)
-[![Tests](https://img.shields.io/badge/tests-99%20passing-3fb950.svg)](backend/tests)
+[![Tests](https://img.shields.io/badge/tests-128%20passing-3fb950.svg)](backend/tests)
 
 </div>
 
@@ -43,7 +43,12 @@ credit system and content-safety screening.
 | أمان محتوى قبل/بعد التوليد | `tests/test_safety.py` |
 | هجرات مزدوجة الاتجاه + حراسة انحراف المخطط | `tests/test_migrations.py` |
 | رؤوس أمنية + `X-Request-ID` + نقطة `/version` | `tests/test_system.py` |
-| **المجموعة الكاملة** | `pytest` → **99 ناجحًا** |
+| تحديد معدل الطلبات (429 + Retry-After) على الدخول وإنشاء المهام | `tests/test_ratelimit.py` |
+| رموز تحديث مع تدوير تلقائي للجلسة | `tests/test_refresh.py` |
+| روابط ملفات موقعة HMAC قصيرة العمر | `tests/test_files.py` |
+| إلغاء المهام مع ردّ الرصيد | `tests/test_cancel.py` |
+| مقاييس Prometheus (بلا بيانات مستخدمين) | `tests/test_metrics.py` |
+| **المجموعة الكاملة** | `pytest` → **128 ناجحًا** |
 | واجهة React 19 + Vite 8 + TS صارم | `npm run build` نظيف |
 | **E2E متصفح حقيقي**: تسجيل ← مشروع ← مهمة ← فيديو مكتمل | `scripts/e2e_smoke.py` → `RESULT: PASS`, 0 أخطاء JS |
 | **توليد AI حقيقي** (لوحة قصصية + إطارات + MP4) | `docs/AI_PROVIDERS.md` — مخرجات `simulated=false` مؤرشفة |
@@ -76,9 +81,10 @@ cp .env.example .env            # اختياري؛ الإعدادات الافت
 ## التحقق (ما يستشهد به المتتبع)
 
 ```bash
-cd backend && python -m pytest -q            # 99 passed
+cd backend && python -m pytest -q            # 128 passed
 cd frontend && npm run build                 # typecheck + bundle
 ./scripts/run_e2e.sh                         # دورة متصفح كاملة → RESULT: PASS
+cd backend && ruff check .                   # lint نظيف
 
 # إثبات المخطط
 cd backend && alembic upgrade head && alembic downgrade base && alembic upgrade head
@@ -92,16 +98,21 @@ cd backend && alembic upgrade head && alembic downgrade base && alembic upgrade 
 | GET | `/api/v1/version` (نسخة + بيئة + مزود) | منفذة |
 | POST | `/api/v1/auth/register` → `201` توكن + 100 رصيد | منفذة |
 | POST | `/api/v1/auth/login` → `200` توكن | منفذة |
+| POST | `/api/v1/auth/refresh` → تدوير زوج الرموز | منفذة |
 | GET | `/api/v1/auth/me` | منفذة (JWT) |
 | GET/POST | `/api/v1/projects` | منفذة (JWT) |
 | GET/PATCH/DELETE | `/api/v1/projects/{id}` | منفذة (الحذف = أرشفة) |
-| POST | `/api/v1/projects/{id}/jobs` → `202` | منفذة (`402` عند نقص الرصيد) |
+| POST | `/api/v1/projects/{id}/jobs` → `202` | منفذة (`402` عند نقص الرصيد، `429` عند تجاوز الحد) |
+| POST | `/api/v1/jobs/{id}/cancel` | منفذة (إلغاء + ردّ الرصيد) |
 | GET | `/api/v1/projects/{id}/jobs`, `/api/v1/jobs/{id}` | منفذة |
 | GET | `/api/v1/credits/me` | منفذة (رصيد + دفتر) |
-| GET | `/api/v1/files/{key}` | منفذة (خدمة محلية / presign لـ S3) |
+| GET | `/api/v1/files/{key}` | منفذة (روابط موقعة HMAC / presign لـ S3) |
+| GET | `/api/v1/metrics` | منفذة (عدادات Prometheus) |
 | GET | `/docs`, `/openapi.json` | منفذة (FastAPI) |
 
 كل الاستجابات تحمل رؤوسًا دفاعية (`nosniff`, `DENY`, `no-referrer`) و`X-Request-ID`.
+الدخول وإنشاء المهام محميان بتحديد معدل (`429 + Retry-After`)، وروابط الملفات موقعة
+HMAC قصيرة العمر، والجلسات تتجدد تلقائيًا عبر رموز التحديث.
 
 ## البنية
 
@@ -127,7 +138,14 @@ docs/                     ARCHITECTURE, DATA_MODEL, AI_PROVIDERS, ENGINEERING_RE
 
 ## النشر
 
-**Docker:** `docker-compose.yml` جاهز للرفع.
+**Docker (إنتاج):** ثلاث صور مبنية فعليًا (غير root + healthchecks): خلفية بنقاط هجرة تلقائية،
+واجهة nginx غير مميّزة مع وكيل `/api` بنفس الأصل، وبوابة AI جانبية. السر إجباري:
+
+```bash
+cp .env.example .env                 # ثم اضبط JWT_SECRET أولاً (لا يقلع بدونه)
+docker compose up --build            # الواجهة :8080 — API :8080/api/v1
+```
+
 **Termux:** `pkg install ffmpeg` مطلوب للتجميع؛ `uvicorn` العادي فقط (لا uvloop)؛
 إن فشل بناء `argon2-cffi`/`pillow`: `pkg install clang python-pillow`.
 **PostgreSQL:** المخطط محايد للمحرك:
@@ -140,12 +158,15 @@ pip install "psycopg[binary]" && cd backend && alembic upgrade head
 
 ## خارطة الطريق
 
-الأولويات القادمة (TTS عربي، طابور مهام، مراقبة، معاينة مشاهد…) موثقة بمنهجية
-وفي مصفوفة تنافسية كاملة في **[docs/ENGINEERING_REVIEW.md](docs/ENGINEERING_REVIEW.md)**.
+الأولويات المتبقية (TTS عربي، طابور مهام مستقل، استرجاع كلمة مرور، تقدم لحظي SSE،
+معاينة مشاهد وقوالب) موثقة بمنهجية وفي مصفوفة تنافسية كاملة في
+**[docs/ENGINEERING_REVIEW.md](docs/ENGINEERING_REVIEW.md)**.
+المنجز في 0.5.0: تحديد معدل، رموز تحديث، مقاييس، إلغاء مهام، روابط موقعة،
+حاويات إنتاج، وlint في CI.
 
 ## الوثائق
 
-`ARCHITECTURE.md` · `DATA_MODEL.md` · `AI_PROVIDERS.md` · `ENGINEERING_REVIEW.md` · `CHANGELOG.md` · `CONTRIBUTING.md`
+`ARCHITECTURE.md` · `DATA_MODEL.md` · `AI_PROVIDERS.md` · `ENGINEERING_REVIEW.md` · `SECURITY.md` · `CONTRIBUTING.md` · `CODE_OF_CONDUCT.md` · `CHANGELOG.md`
 
 ## القواعد غير القابلة للتفاوض
 
@@ -162,7 +183,9 @@ pip install "psycopg[binary]" && cd backend && alembic upgrade head
 ---
 
 <div align="center"><em>English summary: self-hosted, Arabic-first AI video studio —
-real auth (Argon2id+JWT), auditable credits with automatic refunds, content-safety
-screening, pluggable AI providers (mock / gateway / OpenAI-compatible), local or S3
-storage with TTL cleanup, real ffmpeg MP4 composition. 99 passing tests, browser E2E
-proven, runs on a phone. See the table above for test-backed features.</em></div>
+real auth (Argon2id + JWT access/refresh rotation), rate limiting, HMAC-signed
+artifact URLs, auditable credits with automatic refunds, job cancellation,
+content-safety screening, Prometheus metrics, pluggable AI providers
+(mock / gateway / OpenAI-compatible), local or S3 storage with TTL cleanup,
+real ffmpeg MP4 composition. 128 passing tests, browser E2E proven, non-root
+Docker images, runs on a phone. See the table above for test-backed features.</em></div>

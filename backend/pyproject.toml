@@ -2,3 +2,22 @@
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = [".venv", "migrations/versions"]
+
+[tool.ruff.lint]
+# Bug-prone constructs and real errors only — style churn is deliberately
+# out of scope for a codebase whose priority is stability and reviewability.
+select = ["E", "F", "W", "B"]
+ignore = [
+  "E501", # long Arabic UX strings and route tables; hard limit enforced by review
+  "E741", # single-letter locals in compact math/compose helpers
+  "B008", # `Depends(...)` in defaults is the canonical FastAPI pattern
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Alembic migrations must stay byte-stable for up/down fidelity.
+"migrations/*" = ["E", "F", "W", "B"]

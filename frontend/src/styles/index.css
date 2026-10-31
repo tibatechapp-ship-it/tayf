@@ -706,3 +706,62 @@ button.primary:hover:not(:disabled) {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---- Credit ledger (v0.5.0) ------------------------------------------- */
+
+.ledger {
+  margin-top: 12px;
+  border-top: 1px solid var(--border, #232a38);
+  padding-top: 10px;
+}
+
+.ledger summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--muted, #8b95a9);
+  user-select: none;
+}
+
+.ledger-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.ledger-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.ledger-list .delta {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  min-width: 3.2ch;
+  text-align: center;
+}
+
+.ledger-list .delta.pos { color: var(--ok, #3fb950); }
+.ledger-list .delta.neg { color: var(--err, #f85149); }
+
+.ledger-list .ledger-reason { flex: 1; color: var(--muted, #8b95a9); }
+
+.ledger-list .ledger-balance {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted, #8b95a9);
+  font-size: 0.8rem;
+}
+
+/* ---- Job cancel button (v0.5.0) ---------------------------------------- */
+
+.cancel-btn {
+  margin-inline-start: auto;
+  white-space: nowrap;
+}

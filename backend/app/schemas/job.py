@@ -6,8 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.file_tokens import sign_file_url
 from app.models.enums import GenerationStatus
-from app.services.ai.base import VALID_ASPECTS
 
 STYLES = ["cinematic", "anime", "3d_render", "watercolor", "photorealistic", "noir"]
 
@@ -57,7 +57,8 @@ class JobOut(BaseModel):
     def from_model(cls, job) -> "JobOut":  # noqa: ANN001
         data = cls.model_validate(job)
         data.provider = job.provider_name
-        data.output_url = job.result_url
+        data.output_url = sign_file_url(job.result_url)
+        data.thumbnail_url = sign_file_url(job.thumbnail_url)
         storyboard = _storyboard_dict(job)
         if storyboard:
             scenes: list[SceneOut] = []
@@ -72,7 +73,7 @@ class JobOut(BaseModel):
                     SceneOut(
                         index=index,
                         description=str(raw.get("description") or ""),
-                        image_url=raw.get("image_url"),
+                        image_url=sign_file_url(raw.get("image_url")),
                         duration_seconds=float(raw.get("duration_seconds") or 4.0),
                     )
                 )

@@ -80,3 +80,18 @@
   - تشغيل حي على :8111 → `/api/v1/health` 200 بكل الرؤوس + `X-Request-ID` مولّد؛ `/api/v1/version` يرجع `{"version":"0.4.0","python_version":"3.12.16","storage_backend":"local","ai_provider":"mock"}`؛ `/docs` مشمولة بالرؤوس. الخادم أُوقف بعد الإثبات.
 - **درس تقني موثق:** مخرجات Bash في بيئة التنفيذ تُشوَّه عند احتوائها `[m`+حرف (تُبتلع)؛ الاعتماد على `Read`/`grep -c` للتحقق، وقد كاد ذلك يسبب «إصلاحًا» وهميًا لملف CI سليم.
 - **ملاحظة:** `BaseHTTPMiddleware` يسبب deadlock مع TestClient في هذه البيئة — استُبدل بـ pure ASGI (قرار معماري مدون في `core/middleware.py`).
+
+## جولة v0.5.0 — 2026-11-01 (تنفيذ فجوات P0 من التقييم الهندسي)
+
+- **المنجز (كل بند خلفه اختبارات، المجموعة 128 بدل 99):**
+  - **تحديد معدل الطلبات** (T-18 جزئيًا): نافذة منزلقة في الذاكرة صفر اعتماديات (`core/ratelimit.py`) — auth 10/دقيقة/IP (register+login+refresh) وjobs 30/دقيقة/IP، `429 + Retry-After`، دعم `X-Forwarded-For`، تعطيل بـ `RATELIMIT_ENABLED=false`. اختبارات `test_ratelimit.py` (6).
+  - **رموز التحديث** (T-18 جزئيًا): `POST /auth/refresh` بتدوير زوج (30 يومًا `JWT_REFRESH_EXPIRES_DAYS`)؛ فصل الأنواع صارم (الوصول لا يُحدّث، التحديث لا يصرّح)؛ الواجهة تجدّد صامتةً عند 401 بعقد واحد single-flight وتعيد المحاولة (`api.ts`). اختبارات `test_refresh.py` (10).
+  - **روابط ملفات موقعة** (فجوة أمنية): `/files/*` تتطلب `?exp=&sig=` HMAC-SHA256 قصير العمر (6 ساعات) مشتق من `JWT_SECRET`، تُصهر عند التسلسل في `JobOut.from_model` فلا يتغير شيء في الواجهة؛ `FILES_PUBLIC=true` للاستعراض العام. اختبارات `test_files.py` (4).
+  - **إلغاء المهام** (T-16 جزئيًا — Stage 6): `POST /jobs/{id}/cancel` (404/409 محرسة) + فحوص تعاونية بين مراحل خط الإنتاج (`_cancelled` بعد اللوحة القصصية وبين الإطارات وبعد التجميع) + ردّ رصيد `refund_job_cancelled` في الدفتر. اختبارات `test_cancel.py` (5).
+  - **مقاييس Prometheus** (T-18 جزئيًا): `core/metrics.py` عدادات thread-safe + `GET /metrics` بصيغة text/plain v0.0.4: `tayf_http_requests_total{method,status}`, `tayf_jobs_total{status}`, `tayf_credits_total{kind}` — مجمعة بلا أي بيانات مستخدم (اختبار يثبت عدم تسريب البريد/الاسم). تعطيل بـ `METRICS_ENABLED=false`. اختبارات `test_metrics.py` (5).
+  - **حاويات إنتاج**: `backend/Dockerfile` (multi-stage، غير root uid 10001، ffmpeg مضمّن، healthcheck، alembic عند الإقلاع)، `frontend/Dockerfile` (بناء Vite + nginx-unprivileged:8080 مع SPA fallback ووكيل `/api` بنفس الأصل وذاكرة تخزين مؤقت صلبة)، `ai-gateway/Dockerfile`، و`docker-compose.yml` جديد بحجم `tayf-data` وسر `JWT_SECRET` إجباري (`:?` يرفض الإقلاع). CI يبني الصور الثلاث في كل push/PR.
+  - **lint**: ruff (E/F/W/B بلا churn أسلوبي) في `pyproject.toml` + job في CI؛ تنظيف 6 استيرادات ميتة ومتغير حلقة؛ `ruff check .` نظيف.
+  - **واجهة**: دفتر الرصيد (collapsible) في الشريط الجانبي بترجمة أسباب الحركات، زر إلغاء للمهام النشطة، حفظ اللغة AR/EN في localStorage مع مزامنة `<html lang/dir>`. `npm run build` نظيف.
+  - **وثائق**: `SECURITY.md` (نموذج أمان صادق + قائمة إنتاج)، `CODE_OF_CONDUCT.md`، CHANGELOG 0.5.0، `.env.example` بمتغيرات جديدة، README (شارة 128 + صفوف الأدلة + API الجديدة + النشر الإنتاجي)، ملحق v0.5.0 في `ENGINEERING_REVIEW.md` (الأمان 7.5→8.8، التشغيل 7→8.3، UX 7.5→7.8، المتوسط ≈8.4).
+- **تصحيح سجل سابق بالأدلة:** ادّعاء «CI مكسور» (`branches: ain]`) أُبطِل بـ `od -c` — البايتات على القرص والتاريخ كلها `[main]` سليمة؛ ما رُصد تشويه عرض في نقل مخرجات Bash (نفس درس v0.4.1). سُجّل التصحيح في CHANGELOG.
+- **أدلة:** `pytest` → exit 0 **128 passed** (292s)؛ `npm run build` → نجاح؛ `ruff check .` → All checks passed؛ اختبار E2E متصفح حقيقي: انظر أدلة الجولة أدناه.

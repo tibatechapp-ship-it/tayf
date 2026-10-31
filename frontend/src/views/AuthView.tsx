@@ -3,7 +3,7 @@ import { copy, type Lang } from "../i18n/dictionary";
 import {
   login as apiLogin,
   register as apiRegister,
-  setToken,
+  setSession,
   type TokenResponse,
 } from "../services/api";
 
@@ -33,7 +33,7 @@ export default function AuthView({ lang, onAuthenticated, onLangSwitch }: Props)
         mode === "register"
           ? await apiRegister({ email, username, password })
           : await apiLogin({ username_or_email: identifier, password });
-      setToken(data.access_token);
+      setSession(data.access_token, data.refresh_token);
       onAuthenticated(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

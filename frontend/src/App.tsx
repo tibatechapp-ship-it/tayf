@@ -11,8 +11,17 @@ import AuthView from "./views/AuthView";
 import StudioView from "./views/StudioView";
 
 export default function App() {
-  const [lang, setLang] = useState<Lang>("ar");
+  const [lang, setLang] = useState<Lang>(() =>
+    localStorage.getItem("tayf.lang") === "en" ? "en" : "ar",
+  );
   const t = copy[lang];
+
+  // Persist the language choice and keep the document metadata in sync.
+  useEffect(() => {
+    localStorage.setItem("tayf.lang", lang);
+    document.documentElement.lang = lang;
+    document.documentElement.dir = t.dir;
+  }, [lang, t.dir]);
 
   const [ready, setReady] = useState(false);
   const [username, setUsername] = useState<string | null>(null);

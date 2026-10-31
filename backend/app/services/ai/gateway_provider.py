@@ -7,7 +7,6 @@ This provider performs REAL storyboard + keyframe generation. simulated=False.
 """
 
 import base64
-import json
 
 import httpx
 
@@ -133,7 +132,7 @@ class ZaiGatewayProvider(AIProvider):
         if not isinstance(raw_scenes, list) or not raw_scenes:
             raise ProviderError("storyboard JSON has no scenes list")
         scenes: list[Scene] = []
-        for i, raw in enumerate(raw_scenes[:expected], start=1):
+        for _i, raw in enumerate(raw_scenes[:expected], start=1):
             if not isinstance(raw, dict):
                 continue
             description = str(raw.get("description") or "").strip()

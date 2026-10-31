@@ -30,9 +30,14 @@ class UserOut(BaseModel):
 
 class TokenOut(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user: UserOut
     balance: int
+
+
+class RefreshIn(BaseModel):
+    refresh_token: str = Field(min_length=10, max_length=4096)
 
 
 class MeOut(BaseModel):

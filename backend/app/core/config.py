@@ -37,6 +37,20 @@ class Settings(BaseSettings):
     # --- Auth (Argon2id + JWT) ---
     JWT_SECRET: str = ""  # REQUIRED in production. Generate: python -c "import secrets; print(secrets.token_hex(32))"
     JWT_EXPIRES_MINUTES: int = 120
+    JWT_REFRESH_EXPIRES_DAYS: int = 30
+
+    # --- Rate limiting (in-memory sliding window, per client IP) ---
+    RATELIMIT_ENABLED: bool = True
+    RATELIMIT_WINDOW_SECONDS: int = 60
+    RATELIMIT_AUTH_LIMIT: int = 10  # register/login/refresh attempts per window
+    RATELIMIT_JOB_LIMIT: int = 30  # generation jobs created per window
+
+    # --- Artifact URL signing (local storage) ---
+    # false -> /files URLs require a short-lived HMAC signature (secure default)
+    FILES_PUBLIC: bool = False
+
+    # --- Observability ---
+    METRICS_ENABLED: bool = True  # exposes GET /api/v1/metrics (aggregate counters)
 
     # --- AI providers ---
     # mock            -> offline, clearly-simulated output (tests / no keys)

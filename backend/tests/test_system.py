@@ -30,7 +30,7 @@ def test_version_endpoint_reports_build_and_runtime(client):
     response = client.get("/api/v1/version")
     assert response.status_code == 200
     body = response.json()
-    assert body["version"] == app.version == "0.4.0"
+    assert body["version"] == app.version == "0.5.0"
     assert body["api_prefix"] == "/api/v1"
     assert body["python_version"].startswith("3.")
     assert body["storage_backend"] == "local"

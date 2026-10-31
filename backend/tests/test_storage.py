@@ -4,6 +4,7 @@ import os
 import time
 
 from app.core.config import get_settings
+from app.core.file_tokens import sign_file_url
 from app.services.storage.factory import get_storage, run_cleanup_once
 from app.services.storage.base import StorageError
 
@@ -49,17 +50,19 @@ def test_ttl_cleanup_deletes_only_old_files():
 def test_files_route_serves_stored_artifact(client):
     storage = get_storage()
     storage.put_bytes("routes/ping.txt", b"pong", "text/plain")
-    response = client.get("/api/v1/files/routes/ping.txt")
+    signed = sign_file_url("/api/v1/files/routes/ping.txt")
+    response = client.get(signed)
     assert response.status_code == 200
     assert response.text == "pong"
 
 
 def test_files_route_missing_404(client):
-    assert client.get("/api/v1/files/routes/does-not-exist.bin").status_code == 404
+    signed = sign_file_url("/api/v1/files/routes/does-not-exist.bin")
+    assert client.get(signed).status_code == 404
 
 
 def test_files_route_blocks_traversal(client):
-    assert client.get("/api/v1/files/../secrets.txt").status_code in (404, 400)
+    assert client.get("/api/v1/files/../secrets.txt").status_code in (400, 403, 404)
 
 
 def test_s3_backend_requires_full_config(monkeypatch):

@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
-from app.db.session import make_engine, make_session_factory
+from app.db.session import make_session_factory
 from app.models import GenerationJob, Project, User
 from app.repositories.project_repository import (
     create_project,

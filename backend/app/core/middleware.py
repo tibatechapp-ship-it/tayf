@@ -6,8 +6,9 @@ Termux/low-resource deployment target.
 
 - SecurityHeadersMiddleware: hardens every response (nosniff, frame-deny,
   referrer policy, restrictive permissions policy).
-- RequestIDMiddleware: propagates or generates X-Request-ID on every response
-  and emits one structured access-log line per request.
+- RequestIDMiddleware: propagates or generates X-Request-ID on every response,
+  emits one structured access-log line per request and feeds the aggregate
+  Prometheus counters (``tayf_http_requests_total``).
 """
 
 import logging
@@ -17,6 +18,8 @@ import uuid
 
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from app.core.metrics import record_http_request
 
 logger = logging.getLogger("tayf.access")
 
@@ -81,6 +84,8 @@ class RequestIDMiddleware:
             await self.app(scope, receive, send_with_id)
         finally:
             duration_ms = (time.perf_counter() - started) * 1000
+            if status_holder["status"]:
+                record_http_request(scope.get("method", "-"), status_holder["status"])
             logger.info(
                 "%s %s -> %d (%.1f ms) request_id=%s",
                 scope.get("method", "-"),

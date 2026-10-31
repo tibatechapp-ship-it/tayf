@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ASPECTS, copy, STYLES, type Lang } from "../i18n/dictionary";
 import {
   archiveProject,
+  cancelJob,
   createJob,
   createProject,
   fetchCredits,
@@ -10,6 +11,7 @@ import {
   listJobs,
   listProjects,
   type Job,
+  type LedgerEntry,
   type Project,
 } from "../services/api";
 
@@ -52,6 +54,8 @@ export default function StudioView({
   const [style, setStyle] = useState<string>("cinematic");
   const [creatingJob, setCreatingJob] = useState(false);
   const [jobError, setJobError] = useState<string | null>(null);
+  const [ledger, setLedger] = useState<LedgerEntry[] | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const token = getToken() ?? "";
   const pollTimer = useRef<number | null>(null);
@@ -88,9 +92,19 @@ export default function StudioView({
     }
   }, [token, selectedId, onBalanceChange]);
 
+  const refreshLedger = useCallback(async () => {
+    try {
+      const credits = await fetchCredits(token);
+      setLedger(credits.entries);
+    } catch {
+      /* the ledger is supplementary — never block the studio on it */
+    }
+  }, [token]);
+
   useEffect(() => {
     void refreshProjects(false);
-  }, [refreshProjects]);
+    void refreshLedger();
+  }, [refreshProjects, refreshLedger]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -151,6 +165,7 @@ export default function StudioView({
       setPrompt("");
       onBalanceChange(balance - numScenes);
       await refreshJobs();
+      void refreshLedger();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setJobError(message.includes("رصيد") || message.toLowerCase().includes("credit")
@@ -159,6 +174,30 @@ export default function StudioView({
     } finally {
       setCreatingJob(false);
     }
+  }
+
+  async function handleCancel(jobId: string) {
+    if (cancellingId) return;
+    setCancellingId(jobId);
+    try {
+      await cancelJob(token, jobId);
+      await refreshJobs();
+      void refreshLedger();
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCancellingId(null);
+    }
+  }
+
+  function ledgerReason(reason: string): string {
+    const map: Record<string, string> = {
+      signup_bonus: t.ledgerSignup,
+      job_charge: t.ledgerCharge,
+      refund_job_failed: t.ledgerRefundFailed,
+      refund_job_cancelled: t.ledgerRefundCancelled,
+    };
+    return map[reason] ?? `${t.ledgerOther} (${reason})`;
   }
 
   const selected = projects.find((p) => p.id === selectedId) ?? null;
@@ -258,6 +297,29 @@ export default function StudioView({
               </li>
             ))}
           </ul>
+
+          <details className="ledger" data-testid="ledger">
+            <summary>{t.ledgerTitle}</summary>
+            {ledger !== null && ledger.length === 0 && (
+              <p className="hint">{t.ledgerEmpty}</p>
+            )}
+            <ul className="ledger-list">
+              {(ledger ?? []).map((entry) => (
+                <li key={entry.id}>
+                  <span
+                    className={entry.delta >= 0 ? "delta pos" : "delta neg"}
+                    dir="ltr"
+                  >
+                    {entry.delta > 0 ? `+${entry.delta}` : entry.delta}
+                  </span>
+                  <span className="ledger-reason">{ledgerReason(entry.reason)}</span>
+                  <span className="ledger-balance" dir="ltr" title={t.balance}>
+                    = {entry.balance_after}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
         </aside>
 
         <section className="content">
@@ -348,6 +410,17 @@ export default function StudioView({
                       <span className={job.simulated ? "tag simulated" : "tag real"}>
                         {job.simulated ? t.simulatedBadge : t.realBadge}
                       </span>
+                      {ACTIVE_STATUSES.has(job.status) && (
+                        <button
+                          type="button"
+                          className="link danger cancel-btn"
+                          onClick={() => void handleCancel(job.id)}
+                          disabled={cancellingId !== null}
+                          data-testid={`cancel-${job.id}`}
+                        >
+                          {cancellingId === job.id ? t.cancelling : t.cancel}
+                        </button>
+                      )}
                     </div>
 
                     <p className="job-prompt">{job.prompt}</p>

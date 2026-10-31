@@ -19,6 +19,9 @@ os.environ["AI_PROVIDER"] = "mock"
 os.environ["STORAGE_BACKEND"] = "local"
 os.environ["SIGNUP_CREDITS"] = "100"
 os.environ["CREDIT_PER_SCENE"] = "1"
+# Rate limiting off by default: the suite legitimately hammers register/login
+# in loops. The dedicated tests re-enable it and clear the store themselves.
+os.environ["RATELIMIT_ENABLED"] = "false"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

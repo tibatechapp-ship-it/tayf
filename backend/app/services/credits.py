@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.metrics import record_credits
 from app.models import CreditLedger
 
 
@@ -42,6 +43,7 @@ def grant(
     )
     db.add(entry)
     db.flush()
+    record_credits("granted", amount)
     return entry
 
 
@@ -62,11 +64,18 @@ def charge(
     )
     db.add(entry)
     db.flush()
+    record_credits("charged", amount)
     return entry
 
 
-def refund(db: Session, user_id: UUID, amount: int, job_id: UUID | None = None) -> CreditLedger:
-    """Refund a failed job (compensating entry, never makes balance negative)."""
+def refund(
+    db: Session,
+    user_id: UUID,
+    amount: int,
+    job_id: UUID | None = None,
+    reason: str = "refund_job_failed",
+) -> CreditLedger:
+    """Refund a failed/cancelled job (compensating entry, never negative)."""
     if amount <= 0:
         raise ValueError("refund amount must be positive")
     entry = CreditLedger(
@@ -74,8 +83,9 @@ def refund(db: Session, user_id: UUID, amount: int, job_id: UUID | None = None) 
         job_id=job_id,
         delta=amount,
         balance_after=balance_of(db, user_id) + amount,
-        reason="refund_job_failed",
+        reason=reason,
     )
     db.add(entry)
     db.flush()
+    record_credits("refunded", amount)
     return entry

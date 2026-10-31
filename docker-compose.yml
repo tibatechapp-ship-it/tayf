@@ -1,49 +1,53 @@
-# Tayf Studio - optional unified local orchestration.
-# This is OPTIONAL and aimed at capable machines (not Termux).
-# Usage:  docker compose up --build
-# Images are official and code is volume-mounted, so nothing is baked in.
-# The backend runs `alembic upgrade head` before serving (migrations-only app).
+# Tayf Studio — production-oriented compose stack (v0.5.0).
+#
+# Builds real images (backend/Dockerfile, frontend/Dockerfile, ai-gateway/Dockerfile),
+# runs everything as non-root, with healthchecks and a named volume for data.
+#
+# REQUIRED before `docker compose up`: JWT_SECRET (refuses to boot without it):
+#   cp .env.example .env  ->  edit JWT_SECRET (python -c "import secrets; print(secrets.token_hex(32))")
+#
+# UI:  http://localhost:8080   API: http://localhost:8080/api/v1  (proxied same-origin)
 
 services:
   backend:
-    image: python:3.12-slim
-    working_dir: /app
+    build: ./backend
+    image: tayf-backend:0.5.0
+    environment:
+      APP_ENV: production
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env (never commit it)}
+      DATABASE_URL: sqlite:////app/data/tayf.db
+      LOCAL_STORAGE_DIR: /app/data/storage
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      AI_GATEWAY_URL: http://ai-gateway:3030
+      AI_GATEWAY_TOKEN: ${AI_GATEWAY_TOKEN:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      SIGNUP_CREDITS: ${SIGNUP_CREDITS:-100}
     volumes:
-      - ./backend:/app
-    command: >
-      sh -c "pip install --no-cache-dir -r requirements.txt &&
-             python -m alembic upgrade head &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      - tayf-data:/app/data
     ports:
       - "8000:8000"
-    environment:
-      APP_ENV: development
-      JWT_SECRET: "change-me-in-production-0123456789abcdef"
-      DATABASE_URL: "sqlite:///./tayf.db"
-      CORS_ORIGINS: "http://localhost:5173,http://localhost:3000"
+    restart: unless-stopped
+    depends_on:
+      ai-gateway:
+        condition: service_started
 
   ai-gateway:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - ./ai-gateway:/app
-    command: sh -c "npm install --no-save && node index.mjs"
-    ports:
-      - "127.0.0.1:3030:3030"
+    build: ./ai-gateway
+    image: tayf-ai-gateway:0.5.0
     environment:
-      AI_GATEWAY_PORT: "3030"
-      AI_GATEWAY_HOST: "0.0.0.0"  # inside the isolated compose network only
+      AI_GATEWAY_TOKEN: ${AI_GATEWAY_TOKEN:-}
     restart: unless-stopped
 
   frontend:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
-    command: >
-      sh -c "npm install &&
-             npm run dev -- --host 0.0.0.0 --port 5173"
+    build: ./frontend
+    image: tayf-frontend:0.5.0
     ports:
-      - "5173:5173"
+      - "8080:8080"
+    restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+
+volumes:
+  tayf-data:

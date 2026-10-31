@@ -8,20 +8,66 @@
 
 const API = "/api/v1";
 const TOKEN_KEY = "tayf.token";
+const REFRESH_KEY = "tayf.refresh";
 const TIMEOUT_MS = 15_000;
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
+export function getRefreshToken(): string | null {
+  return localStorage.getItem(REFRESH_KEY);
+}
+
 export function setToken(token: string | null): void {
+  // Logging out (or losing the access token) clears the whole session.
   if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
+  else {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+  }
+}
+
+export function setSession(accessToken: string, refreshToken: string | null): void {
+  localStorage.setItem(TOKEN_KEY, accessToken);
+  if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken);
+}
+
+// Single-flight refresh: concurrent 401s share one /auth/refresh call.
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function tryRefresh(): Promise<string | null> {
+  const refresh = getRefreshToken();
+  if (!refresh) return null;
+  if (!refreshInFlight) {
+    refreshInFlight = request<TokenResponse>(
+      "/auth/refresh",
+      { method: "POST", body: { refresh_token: refresh }, allowRefresh: false },
+    )
+      .then((data) => {
+        setSession(data.access_token, data.refresh_token);
+        return data.access_token;
+      })
+      .catch(() => {
+        setToken(null);
+        return null;
+      })
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
 }
 
 async function request<T>(
   path: string,
-  options: { method?: string; body?: unknown; token?: string | null; timeout?: number } = {},
+  options: {
+    method?: string;
+    body?: unknown;
+    token?: string | null;
+    timeout?: number;
+    allowRefresh?: boolean;
+  } = {},
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeout ?? TIMEOUT_MS);
@@ -45,8 +91,12 @@ async function request<T>(
     clearTimeout(timer);
   }
 
-  if (response.status === 401 && options.token) {
-    setToken(null); // stale/invalid token -> force a fresh login
+  // Expired access token -> rotate silently once, then retry the request.
+  if (response.status === 401 && options.token && options.allowRefresh !== false) {
+    const renewed = await tryRefresh();
+    if (renewed) {
+      return request<T>(path, { ...options, token: renewed, allowRefresh: false });
+    }
   }
 
   if (!response.ok) {
@@ -86,6 +136,7 @@ export interface UserOut {
 
 export interface TokenResponse {
   access_token: string;
+  refresh_token: string;
   token_type: string;
   user: UserOut;
   balance: number;
@@ -245,4 +296,16 @@ export function listJobs(token: string, projectId: string): Promise<Job[]> {
 
 export function fetchJob(token: string, jobId: string): Promise<Job> {
   return request<Job>(`/jobs/${jobId}`, { token });
+}
+
+export function cancelJob(token: string, jobId: string): Promise<Job> {
+  return request<Job>(`/jobs/${jobId}/cancel`, { method: "POST", token });
+}
+
+export function refreshSession(refreshToken: string): Promise<TokenResponse> {
+  return request<TokenResponse>("/auth/refresh", {
+    method: "POST",
+    body: { refresh_token: refreshToken },
+    allowRefresh: false,
+  });
 }

@@ -8,6 +8,7 @@ task completes before the test sees the response, making tests deterministic).
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -15,6 +16,8 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.config import get_settings
+from app.core.metrics import record_job_terminal
+from app.core.ratelimit import job_rate_limit
 from app.core.safety import get_safety_layer
 from app.db.session import get_session
 from app.models import GenerationJob, GenerationStatus, Project, User
@@ -52,6 +55,7 @@ def create_job(
     background_tasks: BackgroundTasks,
     current_user: CurrentUser,
     session: SessionDep,
+    _rl: None = Depends(job_rate_limit),
 ) -> JobOut:
     settings = get_settings()
     project = _get_owned_project(session, project_id, current_user.id)
@@ -77,6 +81,7 @@ def create_job(
         session.add(job)
         session.commit()
         session.refresh(job)
+        record_job_terminal(GenerationStatus.REJECTED.value)
         return JobOut.from_model(job)
 
     # 2) create the job row FIRST (uncommitted) so the charge entry can carry
@@ -133,6 +138,37 @@ def list_jobs(
         session, project.id, limit=limit, offset=offset
     )
     return [JobOut.from_model(job) for job in jobs]
+
+
+@router.post(
+    "/jobs/{job_id}/cancel",
+    response_model=JobOut,
+    summary="Cancel a pending/processing job (credits are refunded)",
+    responses={
+        404: {"description": "Job not found or not owned by this user"},
+        409: {"description": "Job already reached a terminal state"},
+    },
+)
+def cancel_job(job_id: uuid.UUID, current_user: CurrentUser, session: SessionDep) -> JobOut:
+    job = job_repository.get_job_owned_by(session, job_id, current_user.id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="المهمة غير موجودة")
+    if job.status in GenerationStatus.terminal():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="لا يمكن إلغاء مهمة منتهية"
+        )
+    job.status = GenerationStatus.CANCELLED
+    job.completed_at = datetime.now(timezone.utc)
+    if job.credits_charged > 0:
+        credits.refund(
+            session, current_user.id, job.credits_charged,
+            job_id=job.id, reason="refund_job_cancelled",
+        )
+        job.credits_charged = 0
+    session.commit()
+    session.refresh(job)
+    record_job_terminal(GenerationStatus.CANCELLED.value)
+    return JobOut.from_model(job)
 
 
 @router.get(

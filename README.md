@@ -95,10 +95,24 @@ docs/                             AUDIT_PHASE_0, ARCHITECTURE, DATA_MODEL
 |---|---|---|
 | GET | `/api/v1/health` | implemented |
 | GET | `/docs`, `/openapi.json` | implemented (FastAPI) |
-| auth / projects / generations / videos / billing | — | **not implemented (Stage 4+)** |
+| POST | `/api/v1/projects` | implemented — `400` if the owner does not exist |
+| GET | `/api/v1/projects?owner_id=&limit=&offset=&include_archived=` | implemented |
+| GET | `/api/v1/projects/{id}?owner_id=` | implemented — `404` for missing **or** foreign rows |
+| PATCH | `/api/v1/projects/{id}?owner_id=` | implemented — partial update |
+| DELETE | `/api/v1/projects/{id}?owner_id=` | implemented — soft delete (`status=archived`), `204` |
+| auth / generations / videos / billing | — | **not implemented (Stage 5+)** |
+
+`owner_id` is an explicit parameter **only until Stage 4 adds authentication** —
+it exists so ownership isolation can be tested (and attacked) for real.
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/projects \
+  -H 'content-type: application/json' \
+  -d '{"name":"Launch video","owner_id":"<user-uuid>"}'
+```
 
 ## Next stage
 
-Stage 3/4: request/response schemas, then the project + auth API on top of these
-repositories (Argon2id, access/refresh tokens, per-resource ownership checks,
-negative tests). No endpoint is announced before it has tests.
+Stage 5: authentication (Argon2id, access/refresh rotation, rate limits) and the
+replacement of the explicit `owner_id` with the token subject. No endpoint is
+announced before it has tests — positive and negative.

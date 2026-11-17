@@ -102,7 +102,12 @@ def create_job(
     cost = job.credits_charged
     try:
         credits.charge(
-            session, current_user.id, cost, reason="job_charge", job_id=job.id
+            session,
+            current_user.id,
+            cost,
+            reason="job_charge",
+            job_id=job.id,
+            operation_key=f"job_charge:{job.id}",
         )
     except credits.InsufficientCredits as exc:
         session.rollback()
@@ -161,8 +166,12 @@ def cancel_job(job_id: uuid.UUID, current_user: CurrentUser, session: SessionDep
     job.completed_at = datetime.now(timezone.utc)
     if job.credits_charged > 0:
         credits.refund(
-            session, current_user.id, job.credits_charged,
-            job_id=job.id, reason="refund_job_cancelled",
+            session,
+            current_user.id,
+            job.credits_charged,
+            job_id=job.id,
+            reason="refund_job_cancelled",
+            operation_key=f"refund_job_cancelled:{job.id}",
         )
         job.credits_charged = 0
     session.commit()

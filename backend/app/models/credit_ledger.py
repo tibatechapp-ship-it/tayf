@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, UTCDateTime, UUIDPrimaryKeyMixin, utc_now
@@ -19,6 +19,13 @@ from app.models.base import Base, UTCDateTime, UUIDPrimaryKeyMixin, utc_now
 
 class CreditLedger(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "credit_ledger"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "operation_key",
+            name="uq_credit_ledger_user_id_operation_key",
+        ),
+    )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
@@ -30,6 +37,9 @@ class CreditLedger(UUIDPrimaryKeyMixin, Base):
     delta: Mapped[int] = mapped_column(Integer, nullable=False)
     balance_after: Mapped[int] = mapped_column(Integer, nullable=False)
     reason: Mapped[str] = mapped_column(String(60), nullable=False)
+    # Caller-supplied idempotency key (e.g. "job_charge:<job_id>"). NULL for
+    # legacy/ad-hoc entries; UNIQUE per user when present.
+    operation_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=utc_now, nullable=False

@@ -69,7 +69,13 @@ def register(
             username=payload.username,
             hashed_password=hash_password(payload.password),
         )
-        credits.grant(db, user.id, settings.SIGNUP_CREDITS, reason="signup_bonus")
+        credits.grant(
+            db,
+            user.id,
+            settings.SIGNUP_CREDITS,
+            reason="signup_bonus",
+            operation_key=f"signup:{user.id}",
+        )
         db.commit()
     except IntegrityError as exc:  # race safety: two parallel registers
         db.rollback()

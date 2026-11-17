@@ -14,7 +14,6 @@ progress. Every step commits, so a restart can only lose the current step.
 
 import asyncio
 import copy
-from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -22,38 +21,21 @@ from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.core.metrics import record_job_terminal
 from app.core.safety import get_safety_layer
-from app.models import GenerationJob, GenerationStatus, Project
+from app.models import GenerationJob, GenerationStatus
+from app.services import job_state
 from app.services.ai.factory import get_ai_provider
 from app.services.compose import ComposerError, compose_video
-from app.services.credits import refund
 from app.services.storage.factory import get_storage
 
 
-def _now():
-    return datetime.now(timezone.utc)
-
-
-def _fail(db: Session, job: GenerationJob, message: str, category: str | None = None) -> None:
-    """Mark FAILED + refund (idempotent: only refunds once, never over CANCELLED)."""
-    job = db.get(GenerationJob, job.id)
-    if job is None or job.status in GenerationStatus.terminal():
-        return
-    project = db.get(Project, job.project_id)
-    job.status = GenerationStatus.FAILED
-    job.error_message = message[:1000]
-    job.safety_category = category
-    job.completed_at = _now()
-    if job.credits_charged > 0 and project is not None:
-        refund(
-            db,
-            project.owner_id,
-            job.credits_charged,
-            job_id=job.id,
-            operation_key=f"refund_job_failed:{job.id}",
-        )
-        job.credits_charged = 0
+def _fail(db: Session, job: GenerationJob, message: str, category: str | None = None) -> bool:
+    """Atomically mark FAILED + refund once. False means another writer won."""
+    _, changed = job_state.fail(db, job.id, message, category)
+    if not changed:
+        return False
     db.commit()
     record_job_terminal(GenerationStatus.FAILED.value)
+    return True
 
 
 def _cancelled(db: Session, job: GenerationJob) -> bool:
@@ -70,11 +52,9 @@ async def run_job_pipeline(job_id: str | UUID) -> None:
         job_id = UUID(job_id)
     db = SessionLocal()
     try:
-        job = db.get(GenerationJob, job_id)
-        if job is None or job.status in GenerationStatus.terminal():
+        job = job_state.start(db, job_id)
+        if job is None:  # already claimed, cancelled, or terminal
             return
-        job.status = GenerationStatus.PROCESSING
-        db.commit()
 
         provider = get_ai_provider()
         storage = get_storage()
@@ -153,18 +133,28 @@ async def run_job_pipeline(job_id: str | UUID) -> None:
             _fail(db, job, verdict.reason or "artifact failed post-check", verdict.category)
             return
 
-        job.result_url = storage.put_bytes(
+        result_url = storage.put_bytes(
             f"jobs/{job.id}/video.mp4", result.video_bytes, "video/mp4"
         )
+        thumbnail_url = None
         if result.thumbnail_bytes:
-            job.thumbnail_url = storage.put_bytes(
+            thumbnail_url = storage.put_bytes(
                 f"jobs/{job.id}/thumb.jpg", result.thumbnail_bytes, "image/jpeg"
             )
-        job.video_size_bytes = len(result.video_bytes)
-        job.duration_seconds = result.duration_seconds
-        job.storyboard = copy.deepcopy({"title": storyboard.title, "scenes": scenes_payload})
-        job.status = GenerationStatus.COMPLETED
-        job.completed_at = _now()
+        storyboard_payload = copy.deepcopy(
+            {"title": storyboard.title, "scenes": scenes_payload}
+        )
+        if not job_state.complete(
+            db,
+            job.id,
+            result_url=result_url,
+            thumbnail_url=thumbnail_url,
+            video_size_bytes=len(result.video_bytes),
+            duration_seconds=result.duration_seconds,
+            storyboard=storyboard_payload,
+        ):
+            # cancel/fail won while the artifact was being stored
+            return
         db.commit()
         record_job_terminal(GenerationStatus.COMPLETED.value)
         print(

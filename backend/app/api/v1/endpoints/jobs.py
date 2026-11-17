@@ -8,7 +8,6 @@ task completes before the test sees the response, making tests deterministic).
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -23,7 +22,7 @@ from app.db.session import get_session
 from app.models import GenerationJob, GenerationStatus, Project, User
 from app.repositories import job_repository
 from app.schemas.job import JobCreateIn, JobOut
-from app.services import credits
+from app.services import credits, job_state
 from app.services.pipeline import run_job_pipeline
 
 router = APIRouter(tags=["jobs"])
@@ -155,25 +154,13 @@ def list_jobs(
     },
 )
 def cancel_job(job_id: uuid.UUID, current_user: CurrentUser, session: SessionDep) -> JobOut:
-    job = job_repository.get_job_owned_by(session, job_id, current_user.id)
-    if job is None:
+    job, outcome = job_state.cancel(session, job_id, current_user.id)
+    if outcome == "not_found":
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="المهمة غير موجودة")
-    if job.status in GenerationStatus.terminal():
+    if outcome == "conflict":
         raise HTTPException(
             status.HTTP_409_CONFLICT, detail="لا يمكن إلغاء مهمة منتهية"
         )
-    job.status = GenerationStatus.CANCELLED
-    job.completed_at = datetime.now(timezone.utc)
-    if job.credits_charged > 0:
-        credits.refund(
-            session,
-            current_user.id,
-            job.credits_charged,
-            job_id=job.id,
-            reason="refund_job_cancelled",
-            operation_key=f"refund_job_cancelled:{job.id}",
-        )
-        job.credits_charged = 0
     session.commit()
     session.refresh(job)
     record_job_terminal(GenerationStatus.CANCELLED.value)

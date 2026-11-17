@@ -44,7 +44,13 @@ def _fail(db: Session, job: GenerationJob, message: str, category: str | None = 
     job.safety_category = category
     job.completed_at = _now()
     if job.credits_charged > 0 and project is not None:
-        refund(db, project.owner_id, job.credits_charged, job_id=job.id)
+        refund(
+            db,
+            project.owner_id,
+            job.credits_charged,
+            job_id=job.id,
+            operation_key=f"refund_job_failed:{job.id}",
+        )
         job.credits_charged = 0
     db.commit()
     record_job_terminal(GenerationStatus.FAILED.value)

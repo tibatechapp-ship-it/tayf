@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, String, true
+from sqlalchemy import Boolean, Integer, String, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UTCDateTime, UUIDPrimaryKeyMixin
@@ -25,6 +25,12 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     last_login_at: Mapped[datetime | None] = mapped_column(
         UTCDateTime(), nullable=True
+    )
+    # Materialized balance for atomic updates. The ledger stays append-only and
+    # remains the source of truth for audits; this column is the fast, locked
+    # value used by charge/grant/refund to avoid read-then-write races.
+    credit_balance: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
     )
 
     projects: Mapped[list["Project"]] = relationship(  # noqa: F821 - resolved by registry

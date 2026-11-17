@@ -1,6 +1,15 @@
 """Credits ledger tests (append-only accounting) + job charge integration."""
 
 import time
+from concurrent.futures import ThreadPoolExecutor
+
+from sqlalchemy import select
+
+from app.core.security import hash_password
+from app.db.session import make_session_factory
+from app.models import CreditLedger
+from app.repositories import user_repository
+from app.services import credits
 
 
 def test_ledger_has_signup_bonus_entry(client, auth_headers):
@@ -69,3 +78,80 @@ def test_insufficient_credits_returns_402(client, auth_headers, project_id):
     # and the failed attempt charged nothing
     balance = client.get("/api/v1/credits/me", headers=headers).json()
     assert balance["balance"] < 8
+
+
+def test_concurrent_charges_do_not_overdraw(engine) -> None:
+    factory = make_session_factory(engine)
+    with factory() as setup:
+        owner = user_repository.create_user(
+            setup,
+            email="race@example.com",
+            username="race",
+            hashed_password=hash_password("Sup3rSecret!"),
+        )
+        credits.grant(setup, owner.id, 100, "test_funding", operation_key="race:funding")
+        setup.commit()
+        user_id = owner.id
+
+    def attempt(index: int) -> str:
+        with factory() as db:
+            try:
+                credits.charge(
+                    db,
+                    user_id,
+                    60,
+                    "race_charge",
+                    operation_key=f"race:charge:{index}",
+                )
+                db.commit()
+                return "charged"
+            except credits.InsufficientCredits:
+                db.rollback()
+                return "insufficient"
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(attempt, range(4)))
+
+    assert results.count("charged") == 1
+    assert results.count("insufficient") == 3
+
+    with factory() as db:
+        assert credits.balance_of(db, user_id) == 40
+        entries = db.scalars(
+            select(CreditLedger).where(CreditLedger.user_id == user_id)
+        ).all()
+        charges = [entry for entry in entries if entry.reason == "race_charge"]
+        assert len(charges) == 1
+        assert charges[0].delta == -60
+        assert charges[0].balance_after == 40
+
+
+def test_duplicate_operation_key_is_noop(session, user) -> None:
+    first = credits.grant(session, user.id, 10, "bonus", operation_key="grant:repeat")
+    session.commit()
+
+    second = credits.grant(session, user.id, 10, "bonus", operation_key="grant:repeat")
+    session.commit()
+
+    assert second.id == first.id
+    assert credits.balance_of(session, user.id) == 10
+    entries = session.scalars(
+        select(CreditLedger).where(CreditLedger.operation_key == "grant:repeat")
+    ).all()
+    assert len(entries) == 1
+
+
+def test_duplicate_charge_key_does_not_charge_twice(session, user) -> None:
+    credits.grant(session, user.id, 100, "test_funding", operation_key="funding:once")
+    first = credits.charge(session, user.id, 30, "job_charge", operation_key="charge:same")
+    session.commit()
+
+    second = credits.charge(session, user.id, 30, "job_charge", operation_key="charge:same")
+    session.commit()
+
+    assert second.id == first.id
+    assert credits.balance_of(session, user.id) == 70
+    entries = session.scalars(
+        select(CreditLedger).where(CreditLedger.operation_key == "charge:same")
+    ).all()
+    assert len(entries) == 1

@@ -19,7 +19,7 @@ def make_engine(url: str, *, echo: bool = False) -> Engine:
     kwargs: dict = {"echo": echo, "pool_pre_ping": True}
     if url.startswith("sqlite"):
         # One file, many threads (uvicorn); SQLite needs this off-thread guard.
-        kwargs["connect_args"] = {"check_same_thread": False}
+        kwargs["connect_args"] = {"check_same_thread": False, "timeout": 30}
     try:
         return create_engine(url, **kwargs)
     except Exception as exc:  # e.g. an unusable DATABASE_URL leaked into the env

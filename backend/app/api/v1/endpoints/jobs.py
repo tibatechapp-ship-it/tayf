@@ -1,8 +1,9 @@
 """Jobs endpoints: create (safety -> credits -> background pipeline) and read.
 
-The pipeline runs as a Starlette background task AFTER the 202 response is
-sent — this works identically under uvicorn and under TestClient (where the
-task completes before the test sees the response, making tests deterministic).
+Job execution has two modes: by default the pipeline runs as a Starlette
+background task AFTER the 202 response (deterministic under TestClient);
+with EXTERNAL_JOB_WORKER=true the job stays PENDING for the durable worker
+to claim, so an API restart cannot lose it.
 """
 
 from __future__ import annotations
@@ -121,7 +122,10 @@ def create_job(
     session.commit()
     session.refresh(job)
 
-    background_tasks.add_task(run_job_pipeline, str(job.id))
+    if not settings.EXTERNAL_JOB_WORKER:
+        # Dev/test single-process path. In production the external worker
+        # claims the PENDING row, so the pipeline survives an API restart.
+        background_tasks.add_task(run_job_pipeline, str(job.id))
     return JobOut.from_model(job)
 
 

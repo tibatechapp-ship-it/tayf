@@ -60,6 +60,11 @@ class GenerationJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     safety_category: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
+    # --- durable queue ownership (Phase 2) ---
+    worker_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
     # --- results ---
     storyboard: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     result_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)

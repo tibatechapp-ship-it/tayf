@@ -38,23 +38,36 @@ def _fail(db: Session, job: GenerationJob, message: str, category: str | None = 
     return True
 
 
-def _cancelled(db: Session, job: GenerationJob) -> bool:
-    """Cooperative cancellation check — re-reads the row so a cancel request
-    from another session (the API process) is visible between pipeline stages."""
+def _cancelled(db: Session, job: GenerationJob, should_stop=None) -> bool:
+    """Cooperative stop check: user cancellation from another session, or the
+    worker's heartbeat reporting that lease ownership was lost."""
     fresh = db.get(GenerationJob, job.id)
     if fresh is not None and fresh.status == GenerationStatus.CANCELLED:
         return True
-    return False
+    return bool(should_stop and should_stop())
 
 
-async def run_job_pipeline(job_id: str | UUID) -> None:
+async def run_job_pipeline(
+    job_id: str | UUID, *, claimed_by: str | None = None, should_stop=None
+) -> None:
+    """Run the pipeline. `claimed_by` means the durable queue already claimed
+    the job; otherwise the job is claimed here (BackgroundTasks dev path)."""
     if isinstance(job_id, str):
         job_id = UUID(job_id)
     db = SessionLocal()
     try:
-        job = job_state.start(db, job_id)
-        if job is None:  # already claimed, cancelled, or terminal
-            return
+        if claimed_by is not None:
+            job = db.get(GenerationJob, job_id)
+            if (
+                job is None
+                or job.status != GenerationStatus.PROCESSING
+                or job.worker_id != claimed_by
+            ):
+                return
+        else:
+            job = job_state.start(db, job_id)
+            if job is None:  # already claimed, cancelled, or terminal
+                return
 
         provider = get_ai_provider()
         storage = get_storage()
@@ -70,7 +83,7 @@ async def run_job_pipeline(job_id: str | UUID) -> None:
         except Exception as exc:
             _fail(db, job, f"storyboard failed: {exc}")
             return
-        if _cancelled(db, job):  # user cancelled while the storyboard was generating
+        if _cancelled(db, job, should_stop):  # user cancelled while the storyboard was generating
             return
 
         # ---- 2) safety screen the AI-produced text as well ----
@@ -101,7 +114,7 @@ async def run_job_pipeline(job_id: str | UUID) -> None:
         frames: list[tuple[bytes, float]] = []
         try:
             for scene in storyboard.scenes:
-                if _cancelled(db, job):  # between keyframes: stop spending money
+                if _cancelled(db, job, should_stop):  # between keyframes: stop spending money
                     return
                 keyframe = await provider.generate_keyframe(scene.image_prompt, job.aspect)
                 key = f"jobs/{job.id}/scene_{scene.index}.{keyframe.extension}"
@@ -124,7 +137,7 @@ async def run_job_pipeline(job_id: str | UUID) -> None:
         except ComposerError as exc:
             _fail(db, job, f"composition failed: {exc}")
             return
-        if _cancelled(db, job):  # cancelled while ffmpeg was running
+        if _cancelled(db, job, should_stop):  # cancelled while ffmpeg was running
             return
 
         # ---- 5) post-generation safety + store artifacts ----

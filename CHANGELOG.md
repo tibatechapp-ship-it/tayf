@@ -13,6 +13,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 - Stripe credit top-ups: fixed server-owned packages, `POST /payments/topup/checkout-session` and a signed `POST /webhooks/stripe` that grants credits exactly once via the append-only ledger (PR #11, merged `ace0dac`; CI `44273690313` — 184 passed, 82.24%).
 - Optional external moderation seam (`MODERATION_API_URL`): prompts and AI-produced text are screened beside the local blocklist; transport errors and malformed verdicts reject by default (PR #12, CI `44281037955` — 197 passed, 82.57%).
 - Google-grade repository polish: `Makefile`, pre-commit hooks, CODEOWNERS, issue/PR templates, and a MkDocs documentation site with Development, Architecture, Runbook and Threat Model pages.
+- CI quality gates: Python 3.11/3.12/3.13 backend matrix, scoped `mypy` lane, pre-commit and docs workflows, and failure artifacts. `pip-audit` remains the enforced dependency gate; GitHub Dependency Graph is a manual repo setting and is not assumed.
 
 ### Security
 - SSE uses a 5-minute HMAC capability ticket bound to one user and one job; native `EventSource` never needs the Bearer token in the URL.

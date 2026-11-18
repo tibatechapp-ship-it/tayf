@@ -48,7 +48,7 @@ class S3StorageBackend(StorageBackend):
         key = sanitize_key(key)
         try:
             response = self._client.get_object(Bucket=self._bucket, Key=key)
-        except self._client.exceptions.NoSuchKey as exc:  # type: ignore[attr-defined]
+        except self._client.exceptions.NoSuchKey as exc:
             raise StorageError(f"not found: {key}") from exc
         return response["Body"].read()
 

@@ -62,7 +62,7 @@ services:
     environment:
       # Must listen on the container network, not just its own loopback.
       AI_GATEWAY_HOST: 0.0.0.0
-      AI_GATEWAY_TOKEN: ${AI_GATEWAY_TOKEN:-}
+      AI_GATEWAY_TOKEN: ${AI_GATEWAY_TOKEN:?set AI_GATEWAY_TOKEN in .env before docker compose up}
     restart: unless-stopped
 
   frontend:

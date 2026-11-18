@@ -8,8 +8,8 @@
  *
  * Design rules:
  * - Binds 127.0.0.1 ONLY by default (override AI_GATEWAY_HOST for isolated docker networks).
- * - Optional shared token: set AI_GATEWAY_TOKEN and the Python backend will
- *   send it in the X-Gateway-Token header.
+ * - The shared token is OPTIONAL on loopback and MANDATORY on any other bind address.
+ *   The Python backend sends it in the X-Gateway-Token header.
  * - Plain Node ESM, zero dependencies except the SDK itself (Termux-friendly).
  */
 
@@ -20,6 +20,12 @@ import ZAI from 'z-ai-web-dev-sdk'
 const PORT = Number(process.env.AI_GATEWAY_PORT || 3030)
 const HOST = process.env.AI_GATEWAY_HOST || '127.0.0.1'
 const TOKEN = process.env.AI_GATEWAY_TOKEN || ''
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
+
+if (!TOKEN && !LOOPBACK_HOSTS.has(HOST)) {
+  console.error('[gateway] refusing to start: AI_GATEWAY_TOKEN is required when AI_GATEWAY_HOST is not loopback')
+  process.exit(1)
+}
 
 const SUPPORTED_SIZES = new Set([
   '1024x1024', '768x1344', '864x1152', '1344x768', '1152x864', '1440x720', '720x1440',

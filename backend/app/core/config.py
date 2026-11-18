@@ -20,7 +20,8 @@ class Settings(BaseSettings):
     # --- Application ---
     APP_NAME: str = "tayf-backend"
     APP_ENV: str = "development"  # development | test | production
-    HOST: str = "0.0.0.0"
+    # Secure local default: exposure is an explicit deployment choice (Docker/compose sets 0.0.0.0).
+    HOST: str = "127.0.0.1"
     PORT: int = 8000
     API_V1_PREFIX: str = "/api/v1"
     # Comma-separated browser origins allowed to call the API.

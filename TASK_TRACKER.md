@@ -20,18 +20,28 @@
 | T-11 | 4 | Frontend product UI (AR/EN, RTL-first) | TESTED | Register/project/job/credits flows; zero mock data | `npm run build` clean; browser E2E PASS |
 | T-12 | 4 | Browser E2E of the full loop | TESTED | register→project→job→completed video in real Chromium | `scripts/e2e_smoke.py` → `RESULT: PASS`, 0 JS errors |
 | T-13 | 4 | **Real AI generation** via zai_gateway | TESTED | `simulated=false` artifacts: real storyboard + JPEG keyframes + MP4 | 2026-10-31: MP4 2.59MB/10.5s from LLM storyboard + 2 real keyframes (wall ≈126s) |
-| T-14 | 4 | ai-gateway sidecar (localhost-only) | TESTED | `/health` + real `/v1/chat` answer; token optional | `GATEWAY-OK` round-trip verified |
+| T-14 | 4 | ai-gateway sidecar (localhost-only) | TESTED | `/health` + real `/v1/chat`; token optional on loopback, REQUIRED on non-loopback binds | `GATEWAY-OK` round-trip verified |
 | T-15 | 4 | CI restored (trigger bug fix) | TESTED | `on.push.branches=[main]` valid; ffmpeg installed for compose tests | was `branches: ain]` → CI never ran on main |
 | T-16 | 5 | WebSocket/SSE live progress | NOT_STARTED | UI updates without polling | replaces 4s poll |
-| T-17 | 5 | Dedicated worker + queue | NOT_STARTED | multi-process jobs survive restarts | swap `background_tasks.add_task` call site |
+| T-17 | 5 | Dedicated worker + queue | PARTIALLY_FIXED | leased queue + recovery shipped; remaining P0 audit items tracked below | PR #6 merged `602eca16` |
 | T-18 | 5 | Real video provider (text-to-video) | NOT_STARTED | same interface, `simulated=false` MP4 from vendor model | behind `services/ai/base.py` |
 | T-19 | 5 | Payments/top-ups on the ledger | NOT_STARTED | purchase → `grant` with receipt reason | ledger already audit-ready |
 | T-20 | 5 | Moderation API + rate limiting | NOT_STARTED | external screening beside local term list | safety layer is the seam |
+| T-21 | 5 | Session hardening (HttpOnly refresh + revocation) | TESTED | cookie-only refresh, digest registry, replay revokes family, logout | PR #7 merged `50a54800`; CI `44220060409` / `44220548636` |
+| T-22 | 5 | CI coverage gate + security scanners | TESTED | 80% floor, pip-audit, bandit, report-only semgrep | `.github/workflows/ci.yml` |
+| T-23 | 5 | Fail-closed binds + patched dependencies | TESTED | loopback defaults, gateway token on non-loopback, pillow 13.x | `test_config.py`; bandit/pip-audit local runs |
+| T-24 | 5 | Docs sync after security batches | TESTED | `CHANGELOG.md` 0.6.0 + this tracker | PR for this batch |
 
 ## سجل الأدلة (Evidence Log)
 
 > كل تحديث حالة يسجّل سطرًا: التاريخ، ما الذي اختُبر فعليًا، وملاحظات.
 
+- **2026-11-18 — دفعة الأمان والتشغيل (T-17، T-21…T-24):** تسليم ودمج PR #5 (XFF), PR #6 (طابور/worker), PR #7 (جلسات HttpOnly قابلة للإلغاء)، ثم هذه الدفعة (docs + CI + ai-gateway + fail-closed binds):
+  - PR #5: `f32cf6d3fdcf5c9bf1f046e32b730494db63ba93`; CI `44207984241` — 139 passed.
+  - PR #6: `602eca1699d63fb1b40a4fadfb25250f804cc06c`; CI `44214430604` — 146 passed. Smoke: `SMOKE PASS`, `RECOVERY SMOKE PASS`, `attempts=2`.
+  - PR #7: `50a5480001270da3288dd673fe13d64a692f164d`; CI `44220060409` — 151 passed; post-merge `44220548636` — 151 passed.
+  - محلي: `bandit -r app -ll -q` و`pip-audit -r requirements.txt` نظيفان بعد رفع pillow إلى 13.x وتغيير HOST الافتراضي؛ تغطية `80.28%` على الاختبارات القابلة للتشغيل محليًا (الحد الجديد 80%، والـ CI يشمل كل الاختبارات). أضفنا `backend/tests/__init__.py` بعد ما ظهر تضارب استيراد مع حزمة `tests` أخرى على `PYTHONPATH`.
+  - مذكور للمراجعة: PR #3/#4 اتقفلوا بسبب GitGuardian `Generic Password`; استخدمنا login fixtures بـ `"password": "x"`.
 - **2026-10-31 — الدمج الموحد (T-04…T-15):** دمج خطّي VisionForge (ميزات المرحلة 2 غير المُرحّلة) داخل مستودع tayf القياسي:
   - **خط الأساس الحقيقي قبل الدمج:** suite الفكرة (visionforge) = 44 ✓ / 4 ✗ (خلل `asyncio.create_task` في معالج متزامن). tayf كان CI الخاص به معطلًا (`branches: ain]`) واختباراته تتعطل مع `DATABASE_URL` غير صالح يسرَب من بيئة الاستضافة — أصبح conftest يضبط البيئة قبل أي استيراد.
   - **الإصلاحات الجوهرية أثناء الدمج:**

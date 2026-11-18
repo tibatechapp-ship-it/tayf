@@ -3,7 +3,8 @@ FROM node:20-alpine
 WORKDIR /app
 COPY package.json ./
 COPY index.mjs ./
-RUN npm install --omit=dev --no-audit --no-fund \
+RUN node --check index.mjs \
+    && npm install --omit=dev --no-audit --no-fund \
     && npm cache clean --force
 
 USER node

@@ -101,6 +101,17 @@ export interface Copy {
   proofLoading: string;
   proofError: string;
 
+  // human approval gates
+  requireApprovals: string;
+  approvalTitle: string;
+  approvalStoryboard: string;
+  approvalAssets: string;
+  approvalNote: string;
+  approvalApprove: string;
+  approvalReject: string;
+  approvalBusy: string;
+  approvalRejected: string;
+
   // ledger + cancellation
   ledgerTitle: string;
   ledgerEmpty: string;
@@ -224,6 +235,16 @@ export const copy: Record<Lang, Copy> = {
     proofLoading: "جارٍ تحميل الإثبات…",
     proofError: "تعذّر تحميل الإثبات",
 
+    requireApprovals: "مراجعة بشرية قبل كل مرحلة",
+    approvalTitle: "مراجعة المرحلة",
+    approvalStoryboard: "مراجعة النص والوصف",
+    approvalAssets: "مراجعة الصور والفيديو",
+    approvalNote: "ملاحظة (اختياري)",
+    approvalApprove: "موافقة ومتابعة",
+    approvalReject: "رفض وإلغاء المهمة",
+    approvalBusy: "جارٍ الإرسال…",
+    approvalRejected: "تم رفض المرحلة",
+
     ledgerTitle: "دفتر الرصيد",
     ledgerEmpty: "لا حركات بعد.",
     ledgerSignup: "مكافأة التسجيل",
@@ -344,6 +365,16 @@ export const copy: Record<Lang, Copy> = {
     proofBlocked: "Blocked",
     proofLoading: "Loading proof…",
     proofError: "Could not load proof",
+
+    requireApprovals: "Human review before each stage",
+    approvalTitle: "Stage review",
+    approvalStoryboard: "Review text and prompts",
+    approvalAssets: "Review images and video",
+    approvalNote: "Note (optional)",
+    approvalApprove: "Approve and continue",
+    approvalReject: "Reject and cancel job",
+    approvalBusy: "Sending…",
+    approvalRejected: "Stage rejected",
 
     ledgerTitle: "Credit ledger",
     ledgerEmpty: "No movements yet.",

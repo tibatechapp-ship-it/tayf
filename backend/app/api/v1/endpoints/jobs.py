@@ -28,6 +28,7 @@ from app.db.session import get_session
 from app.models import GenerationJob, GenerationStatus, Project, User
 from app.repositories import job_repository
 from app.schemas.job import (
+    ApprovalDecisionIn,
     JobCreateIn,
     JobOut,
     JobProofOut,
@@ -36,7 +37,7 @@ from app.schemas.job import (
     ProofEventOut,
     StreamTicketOut,
 )
-from app.services import credits, job_state
+from app.services import approvals, credits, job_state
 from app.services.pipeline import run_job_pipeline
 
 router = APIRouter(tags=["jobs"])
@@ -116,6 +117,7 @@ def create_job(
         input_params={"requested_by": str(current_user.id)},
         status=GenerationStatus.PENDING,
         credits_charged=cost,
+        require_approvals=payload.require_approvals,
     )
     session.add(job)
     session.flush()  # assigns job.id without committing
@@ -189,6 +191,45 @@ def cancel_job(job_id: uuid.UUID, current_user: CurrentUser, session: SessionDep
     session.commit()
     session.refresh(job)
     record_job_terminal(GenerationStatus.CANCELLED.value)
+    return JobOut.from_model(job)
+
+
+@router.post(
+    "/jobs/{job_id}/approval",
+    response_model=JobOut,
+    summary="Approve or reject the open stage gate (reject refunds credits)",
+    responses={
+        404: {"description": "Job not found or not owned by this user"},
+        409: {"description": "No open approval gate on this job"},
+    },
+)
+def decide_approval(
+    job_id: uuid.UUID,
+    payload: ApprovalDecisionIn,
+    background_tasks: BackgroundTasks,
+    current_user: CurrentUser,
+    session: SessionDep,
+) -> JobOut:
+    outcome, gate = approvals.decide_gate(
+        session, job_id, current_user.id, payload.decision, payload.note
+    )
+    if outcome == "not_found":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="المهمة غير موجودة")
+    if outcome == "conflict":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="لا توجد موافقة معلقة لهذه المهمة"
+        )
+    if payload.decision == "reject":
+        _job, outcome = job_state.cancel(session, job_id, current_user.id)
+        if outcome != "ok":  # pragma: no cover - the gate UPDATE already guarded this
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="تعذر إلغاء المهمة")
+        session.commit()
+        record_job_terminal(GenerationStatus.CANCELLED.value)
+    else:
+        assert gate is not None  # guaranteed by decide_gate's "ok" outcome
+        background_tasks.add_task(run_job_pipeline, str(job_id), resume_from=gate["stage"])
+    session.expire_all()
+    job = job_repository.get_job_owned_by(session, job_id, current_user.id)
     return JobOut.from_model(job)
 
 

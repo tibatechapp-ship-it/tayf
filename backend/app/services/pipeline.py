@@ -25,7 +25,8 @@ from app.core.safety import get_safety_layer
 from app.db.session import SessionLocal
 from app.models import GenerationJob, GenerationStatus
 from app.models.base import utc_now
-from app.services import job_state
+from app.services import approvals, job_state
+from app.services.ai.base import Scene, Storyboard
 from app.services.ai.factory import get_ai_provider
 from app.services.compose import ComposerError, compose_video, extract_thumbnail
 from app.services.storage.factory import get_storage
@@ -90,16 +91,93 @@ def _proof(
         print(f"[proof] could not record stage '{stage}': {exc}")
 
 
+def _storyboard_from_job(job: GenerationJob) -> tuple[Storyboard, list[dict]]:
+    """Rebuild the in-memory storyboard after a resume (no re-generation cost)."""
+    raw = job.storyboard if isinstance(job.storyboard, dict) else {}
+    scenes: list[Scene] = []
+    payload: list[dict] = []
+    for item in raw.get("scenes", []) if isinstance(raw.get("scenes", []), list) else []:
+        if not isinstance(item, dict):
+            continue
+        index = int(item.get("index") or len(scenes) + 1)
+        duration = float(item.get("duration_seconds") or 4.0)
+        description = str(item.get("description") or "")
+        image_prompt = str(item.get("image_prompt") or "")
+        scenes.append(
+            Scene(
+                index=index,
+                description=description,
+                image_prompt=image_prompt,
+                duration_seconds=duration,
+            )
+        )
+        payload.append(
+            {
+                "index": index,
+                "description": description,
+                "image_prompt": image_prompt,
+                "duration_seconds": duration,
+                "image_url": item.get("image_url"),
+            }
+        )
+    return Storyboard(title=str(raw.get("title") or ""), scenes=scenes), payload
+
+
+def _hold(
+    db: Session,
+    job: GenerationJob,
+    stage: str,
+    *,
+    review: dict,
+    resume: dict,
+) -> bool:
+    """Pause for human review. False => the caller must stop immediately."""
+    started = utc_now()
+    if job.pending_approval is not None:  # a consumed gate must not block the next one
+        job.pending_approval = None
+        db.commit()
+    paused = approvals.request_gate(db, job.id, stage, review=review, resume=resume)
+    if paused:
+        _proof(
+            db,
+            job,
+            stage=f"approval:{stage}",
+            started_at=started,
+            inputs={"review": review},
+            verification={"allowed": True, "checker": "human", "decision": "pending"},
+        )
+    return paused
+
+
 async def run_job_pipeline(
-    job_id: str | UUID, *, claimed_by: str | None = None, should_stop=None
+    job_id: str | UUID,
+    *,
+    claimed_by: str | None = None,
+    should_stop=None,
+    resume_from: str | None = None,
 ) -> None:
     """Run the pipeline. `claimed_by` means the durable queue already claimed
-    the job; otherwise the job is claimed here (BackgroundTasks dev path)."""
+    the job; `resume_from` continues after an approved human gate; otherwise
+    the job is claimed here (BackgroundTasks dev path)."""
     if isinstance(job_id, str):
         job_id = UUID(job_id)
     db = SessionLocal()
     try:
-        if claimed_by is not None:
+        if resume_from is not None:
+            job = db.get(GenerationJob, job_id)
+            gate = job.pending_approval if job is not None else None
+            if (
+                job is None
+                or job.status != GenerationStatus.PROCESSING
+                or not isinstance(gate, dict)
+                or gate.get("stage") != resume_from
+                or gate.get("decision") != "approve"
+            ):
+                return
+            resume_context = dict(gate.get("resume") or {})
+            job.pending_approval = None  # consumed; the decision stays in history
+            db.commit()
+        elif claimed_by is not None:
             job = db.get(GenerationJob, job_id)
             if (
                 job is None
@@ -107,10 +185,12 @@ async def run_job_pipeline(
                 or job.worker_id != claimed_by
             ):
                 return
+            resume_context = {}
         else:
             job = job_state.start(db, job_id)
             if job is None:  # already claimed, cancelled, or terminal
                 return
+            resume_context = {}
 
         provider = get_ai_provider()
         storage = get_storage()
@@ -119,62 +199,67 @@ async def run_job_pipeline(
         job.model_version = str(getattr(provider, "model_version", "") or "")
         job.simulated = bool(provider.simulated)
         db.commit()
-        storyboard_started = utc_now()
-        _progress(db, job, 10, "storyboard")
+        if resume_from == "storyboard":
+            storyboard, _ = _storyboard_from_job(job)
+        else:
+            storyboard_started = utc_now()
+            _progress(db, job, 10, "storyboard")
 
-        # ---- 1) storyboard (real or simulated by provider) ----
-        try:
-            storyboard = await provider.generate_storyboard(job.prompt, job.num_scenes, job.style)
-        except Exception as exc:
-            _fail(db, job, f"storyboard failed: {exc}")
-            return
-        if _cancelled(db, job, should_stop):  # user cancelled while the storyboard was generating
-            return
-        _proof(
-            db,
-            job,
-            stage="storyboard",
-            started_at=storyboard_started,
-            inputs={"prompt": job.prompt, "num_scenes": job.num_scenes, "style": job.style},
-            outputs={"title": storyboard.title, "scene_count": len(storyboard.scenes)},
-            verification={"allowed": True, "checker": "provider"},
-        )
-
-        # ---- 2) safety screen the AI-produced text as well ----
-        safety_started = utc_now()
-        _progress(db, job, 30, "safety")
-        scenes_checked = 0
-        for scene in storyboard.scenes:
-            verdict = safety.check_text_block(f"{scene.description} {scene.image_prompt}")
-            scenes_checked += 1
-            if not verdict.allowed:
-                _proof(
-                    db,
-                    job,
-                    stage="safety_text",
-                    started_at=safety_started,
-                    inputs={"scenes_checked": scenes_checked},
-                    verification={
-                        "allowed": False,
-                        "checker": "safety.text",
-                        "reason": verdict.reason,
-                        "category": verdict.category,
-                    },
+            # ---- 1) storyboard (real or simulated by provider) ----
+            try:
+                storyboard = await provider.generate_storyboard(
+                    job.prompt, job.num_scenes, job.style
                 )
-                _fail(db, job, verdict.reason or "blocked by safety layer", verdict.category)
+            except Exception as exc:
+                _fail(db, job, f"storyboard failed: {exc}")
                 return
-        _proof(
-            db,
-            job,
-            stage="safety_text",
-            started_at=safety_started,
-            inputs={"scenes_checked": scenes_checked},
-            verification={
-                "allowed": True,
-                "checker": "safety.text",
-                "scenes_checked": scenes_checked,
-            },
-        )
+            if _cancelled(db, job, should_stop):  # cancelled while generating
+                return
+            _proof(
+                db,
+                job,
+                stage="storyboard",
+                started_at=storyboard_started,
+                inputs={"prompt": job.prompt, "num_scenes": job.num_scenes, "style": job.style},
+                outputs={"title": storyboard.title, "scene_count": len(storyboard.scenes)},
+                verification={"allowed": True, "checker": "provider"},
+            )
+
+            # ---- 2) safety screen the AI-produced text as well ----
+            safety_started = utc_now()
+            _progress(db, job, 30, "safety")
+            scenes_checked = 0
+            for scene in storyboard.scenes:
+                verdict = safety.check_text_block(f"{scene.description} {scene.image_prompt}")
+                scenes_checked += 1
+                if not verdict.allowed:
+                    _proof(
+                        db,
+                        job,
+                        stage="safety_text",
+                        started_at=safety_started,
+                        inputs={"scenes_checked": scenes_checked},
+                        verification={
+                            "allowed": False,
+                            "checker": "safety.text",
+                            "reason": verdict.reason,
+                            "category": verdict.category,
+                        },
+                    )
+                    _fail(db, job, verdict.reason or "blocked by safety layer", verdict.category)
+                    return
+            _proof(
+                db,
+                job,
+                stage="safety_text",
+                started_at=safety_started,
+                inputs={"scenes_checked": scenes_checked},
+                verification={
+                    "allowed": True,
+                    "checker": "safety.text",
+                    "scenes_checked": scenes_checked,
+                },
+            )
 
         scenes_payload = [
             {
@@ -194,40 +279,102 @@ async def run_job_pipeline(
         job.storyboard = copy.deepcopy(storyboard_payload)
         db.commit()
 
-        # ---- 3a) native text-to-video: vendor renders motion directly ----
-        if provider.supports_native_video:
-            video_started = utc_now()
-            _progress(db, job, 70, "composing")
-            try:
-                video = await provider.generate_video(storyboard, job.aspect, job.style)
-            except Exception as exc:
-                _fail(db, job, f"native video generation failed: {exc}")
-                return
-            if _cancelled(db, job, should_stop):
-                return
-            _proof(
+        # ---- human gate 1: review the generated script before spending on assets ----
+        if job.require_approvals and resume_from is None:
+            if not _hold(
                 db,
                 job,
-                stage="video",
-                started_at=video_started,
-                inputs={"aspect": job.aspect, "style": job.style},
-                outputs={
-                    "duration_seconds": video.duration_seconds,
-                    "video_size_bytes": len(video.video_bytes),
-                },
-                verification={"allowed": True, "checker": "provider"},
-            )
+                "storyboard",
+                review=copy.deepcopy(storyboard_payload),
+                resume={"stage": "storyboard"},
+            ):
+                return
+            return
+
+        # ---- 3a) native text-to-video: vendor renders motion directly ----
+        if provider.supports_native_video:
+            if resume_from == "assets":
+                # The approved bytes are already in storage — never re-generate.
+                video_key = str(resume_context["video_key"])
+                video_bytes = storage.get_bytes(video_key)
+                video_duration = float(resume_context.get("duration_seconds") or 0.0)
+                video_extension = str(resume_context.get("extension") or "mp4")
+                video_content_type = str(resume_context.get("content_type") or "video/mp4")
+                thumbnail_url = resume_context.get("thumbnail_url")
+                result_url = None
+            else:
+                video_started = utc_now()
+                _progress(db, job, 70, "composing")
+                try:
+                    video = await provider.generate_video(storyboard, job.aspect, job.style)
+                except Exception as exc:
+                    _fail(db, job, f"native video generation failed: {exc}")
+                    return
+                if _cancelled(db, job, should_stop):
+                    return
+                _proof(
+                    db,
+                    job,
+                    stage="video",
+                    started_at=video_started,
+                    inputs={"aspect": job.aspect, "style": job.style},
+                    outputs={
+                        "duration_seconds": video.duration_seconds,
+                        "video_size_bytes": len(video.video_bytes),
+                    },
+                    verification={"allowed": True, "checker": "provider"},
+                )
+                video_bytes = video.video_bytes
+                video_duration = video.duration_seconds
+                video_extension = video.extension
+                video_content_type = video.content_type
+                result_url = None
+                thumbnail_url = None
+                if job.require_approvals:
+                    # Store a reviewable preview BEFORE the gate. On resume the
+                    # same keys are read back instead of calling the vendor again.
+                    video_key = f"jobs/{job.id}/video.{video_extension}"
+                    result_url = storage.put_bytes(video_key, video_bytes, video_content_type)
+                    try:
+                        preview = await asyncio.to_thread(extract_thumbnail, video_bytes)
+                    except Exception:
+                        preview = None
+                    thumbnail_url = (
+                        storage.put_bytes(f"jobs/{job.id}/thumb.jpg", preview, "image/jpeg")
+                        if preview
+                        else None
+                    )
+                    if not _hold(
+                        db,
+                        job,
+                        "assets",
+                        review={
+                            "kind": "video",
+                            "video_url": result_url,
+                            "thumbnail_url": thumbnail_url,
+                            "duration_seconds": video_duration,
+                        },
+                        resume={
+                            "video_key": video_key,
+                            "extension": video_extension,
+                            "content_type": video_content_type,
+                            "duration_seconds": video_duration,
+                            "thumbnail_url": thumbnail_url,
+                        },
+                    ):
+                        return
+                    return
 
             artifact_started = utc_now()
             _progress(db, job, 85, "storing")
-            verdict = safety.check_artifact(len(video.video_bytes))
+            verdict = safety.check_artifact(len(video_bytes))
             if not verdict.allowed:
                 _proof(
                     db,
                     job,
                     stage="safety_artifact",
                     started_at=artifact_started,
-                    inputs={"video_size_bytes": len(video.video_bytes)},
+                    inputs={"video_size_bytes": len(video_bytes)},
                     verification={
                         "allowed": False,
                         "checker": "safety.artifact",
@@ -242,31 +389,30 @@ async def run_job_pipeline(
                 job,
                 stage="safety_artifact",
                 started_at=artifact_started,
-                inputs={"video_size_bytes": len(video.video_bytes)},
+                inputs={"video_size_bytes": len(video_bytes)},
                 verification={"allowed": True, "checker": "safety.artifact"},
             )
             store_started = utc_now()
-            result_url = storage.put_bytes(
-                f"jobs/{job.id}/video.{video.extension}", video.video_bytes, video.content_type
-            )
-            try:
-                thumbnail_bytes = await asyncio.to_thread(extract_thumbnail, video.video_bytes)
-            except Exception:  # thumbnails are best-effort; the video is the artifact
-                thumbnail_bytes = None
-            thumbnail_url = (
-                storage.put_bytes(
-                    f"jobs/{job.id}/thumb.jpg", thumbnail_bytes, "image/jpeg"
+            if thumbnail_url is None and resume_from != "assets":
+                try:
+                    final_thumb = await asyncio.to_thread(extract_thumbnail, video_bytes)
+                except Exception:
+                    final_thumb = None
+                thumbnail_url = (
+                    storage.put_bytes(f"jobs/{job.id}/thumb.jpg", final_thumb, "image/jpeg")
+                    if final_thumb
+                    else None
                 )
-                if thumbnail_bytes
-                else None
+            result_url = storage.put_bytes(
+                f"jobs/{job.id}/video.{video_extension}", video_bytes, video_content_type
             )
             if not job_state.complete(
                 db,
                 job.id,
                 result_url=result_url,
                 thumbnail_url=thumbnail_url,
-                video_size_bytes=len(video.video_bytes),
-                duration_seconds=video.duration_seconds,
+                video_size_bytes=len(video_bytes),
+                duration_seconds=video_duration,
                 storyboard=storyboard_payload,
             ):
                 return
@@ -283,43 +429,76 @@ async def run_job_pipeline(
             record_job_terminal(GenerationStatus.COMPLETED.value)
             print(
                 f"[pipeline] job {job_id} completed via native T2V "
-                f"({video.duration_seconds}s, {len(video.video_bytes)} bytes, "
+                f"({video_duration}s, {len(video_bytes)} bytes, "
                 f"provider={provider.name}, simulated={provider.simulated})"
             )
             return
 
-        keyframes_started = utc_now()
-        _progress(db, job, 40, "keyframes")
+        if resume_from == "assets":
+            frame_keys = [str(key) for key in resume_context["frame_keys"]]
+            durations = [float(value) for value in resume_context["durations"]]
+            frames = [
+                (storage.get_bytes(key), duration)
+                for key, duration in zip(frame_keys, durations, strict=True)
+            ]
+        else:
+            keyframes_started = utc_now()
+            _progress(db, job, 40, "keyframes")
 
-        # ---- 3b) keyframe path (stored for the gallery) ----
-        frames: list[tuple[bytes, float]] = []
-        try:
-            for scene in storyboard.scenes:
-                if _cancelled(db, job, should_stop):  # between keyframes: stop spending money
+            # ---- 3b) keyframe path (stored for the gallery) ----
+            frames: list[tuple[bytes, float]] = []
+            frame_keys: list[str] = []
+            try:
+                for scene in storyboard.scenes:
+                    if _cancelled(db, job, should_stop):  # stop spending money
+                        return
+                    keyframe = await provider.generate_keyframe(scene.image_prompt, job.aspect)
+                    key = f"jobs/{job.id}/scene_{scene.index}.{keyframe.extension}"
+                    scenes_payload[scene.index - 1]["image_url"] = storage.put_bytes(
+                        key, keyframe.image_bytes, keyframe.content_type
+                    )
+                    frame_keys.append(key)
+                    frames.append((keyframe.image_bytes, scene.duration_seconds))
+            except Exception as exc:
+                _fail(db, job, f"keyframe generation failed: {exc}")
+                return
+            # deepcopy: the nested payload was mutated in place, and SQLAlchemy
+            # only flushes a JSON column when the new value differs structurally
+            # from the committed one (shared nested objects would compare equal).
+            job.storyboard = copy.deepcopy({"title": storyboard.title, "scenes": scenes_payload})
+            db.commit()
+            _proof(
+                db,
+                job,
+                stage="keyframes",
+                started_at=keyframes_started,
+                inputs={"aspect": job.aspect, "scenes": job.num_scenes},
+                outputs={"keyframes_stored": len(frames)},
+                verification={"allowed": True, "checker": "provider"},
+            )
+            if job.require_approvals:
+                if not _hold(
+                    db,
+                    job,
+                    "assets",
+                    review={
+                        "kind": "images",
+                        "scenes": [
+                            {
+                                "index": scene.get("index"),
+                                "description": scene.get("description"),
+                                "image_url": scene.get("image_url"),
+                            }
+                            for scene in scenes_payload
+                        ],
+                    },
+                    resume={
+                        "frame_keys": frame_keys,
+                        "durations": [duration for _, duration in frames],
+                    },
+                ):
                     return
-                keyframe = await provider.generate_keyframe(scene.image_prompt, job.aspect)
-                key = f"jobs/{job.id}/scene_{scene.index}.{keyframe.extension}"
-                scenes_payload[scene.index - 1]["image_url"] = storage.put_bytes(
-                    key, keyframe.image_bytes, keyframe.content_type
-                )
-                frames.append((keyframe.image_bytes, scene.duration_seconds))
-        except Exception as exc:
-            _fail(db, job, f"keyframe generation failed: {exc}")
-            return
-        # deepcopy: the nested payload was mutated in place, and SQLAlchemy
-        # only flushes a JSON column when the new value differs structurally
-        # from the committed one (shared nested objects would compare equal).
-        job.storyboard = copy.deepcopy({"title": storyboard.title, "scenes": scenes_payload})
-        db.commit()
-        _proof(
-            db,
-            job,
-            stage="keyframes",
-            started_at=keyframes_started,
-            inputs={"aspect": job.aspect, "scenes": job.num_scenes},
-            outputs={"keyframes_stored": len(frames)},
-            verification={"allowed": True, "checker": "provider"},
-        )
+                return
 
         compose_started = utc_now()
         _progress(db, job, 70, "composing")

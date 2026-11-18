@@ -69,6 +69,13 @@ class GenerationJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Append-only, hash-chained per-stage proof (see app/core/job_proof.py).
     proof_events: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
 
+    # --- optional human approval gates ---
+    require_approvals: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Current gate: {stage, review, resume, requested_at, decision, note, decided_at}.
+    pending_approval: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Immutable log of every gate decision (approve/reject + note + actor).
+    approval_history: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
+
     # --- durable queue ownership (Phase 2) ---
     worker_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     lease_until: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)

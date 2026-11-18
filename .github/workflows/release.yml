@@ -47,7 +47,7 @@ jobs:
           JWT_SECRET: ci-only-secret-0123456789abcdef0123456789abcdef
         run: python -m pytest -q --cov=app --cov-report=term --cov-fail-under=80
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm

@@ -1,0 +1,24 @@
+# Pre-commit: fast, deterministic checks before code leaves the workstation.
+# Ruff formatting is intentionally NOT enforced here yet: the existing codebase
+# has pre-existing line-length churn. `ruff check --fix` is the bug-catching gate.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.5
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backend/

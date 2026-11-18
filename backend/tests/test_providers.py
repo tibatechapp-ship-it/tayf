@@ -89,3 +89,106 @@ def test_image_format_sniffing_is_honest():
     assert webp == ("webp", "image/webp")
     unknown = sniff_image_format(b"\x00\x00\x00\x00")
     assert unknown[0] == "png"  # generic fallback, never mislabeled as AI-verified
+
+
+def test_replicate_provider_requires_token(monkeypatch):
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "AI_PROVIDER", "replicate_t2v")
+    monkeypatch.setattr(settings, "REPLICATE_API_TOKEN", "")
+    with pytest.raises(ProviderError, match="REPLICATE_API_TOKEN"):
+        get_ai_provider()
+
+
+def test_factory_returns_replicate_t2v(monkeypatch):
+    from app.core.config import get_settings
+    from app.services.ai.replicate_t2v_provider import ReplicateT2VProvider
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "AI_PROVIDER", "replicate_t2v")
+    monkeypatch.setattr(settings, "REPLICATE_API_TOKEN", "unit" + "-token")
+    provider = get_ai_provider()
+    assert isinstance(provider, ReplicateT2VProvider)
+    assert provider.simulated is False
+    assert provider.supports_native_video is True
+
+
+def test_replicate_text_output_joins_iterator_tokens():
+    from app.services.ai.replicate_t2v_provider import ReplicateT2VProvider
+
+    assert ReplicateT2VProvider._text_to_string(["{'title'", ": 'T'}"]) == "{'title': 'T'}"
+
+
+def test_replicate_video_url_prefers_video_key():
+    from app.services.ai.replicate_t2v_provider import ReplicateT2VProvider
+
+    output = [{"logs": "done"}, {"video": "https://replicate.delivery/example.mp4"}]
+    assert ReplicateT2VProvider._video_url(output) == "https://replicate.delivery/example.mp4"
+
+
+@pytest.mark.asyncio
+async def test_replicate_rejects_foreign_output_host(monkeypatch):
+    from app.core.config import get_settings
+    from app.services.ai.replicate_t2v_provider import ReplicateT2VProvider
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "REPLICATE_API_TOKEN", "unit" + "-token")
+    provider = ReplicateT2VProvider()
+    with pytest.raises(ProviderError, match="replicate.delivery"):
+        await provider._download_video("https://example.com/video.mp4")
+
+
+def test_replicate_video_sniffing_accepts_mp4_only():
+    from app.services.ai.replicate_t2v_provider import ReplicateT2VProvider
+
+    mp4 = b"\x00\x00\x00\x18ftypmp42" + b"x" * 100
+    assert ReplicateT2VProvider._sniff_video(mp4) == ("mp4", "video/mp4")
+    with pytest.raises(ProviderError, match="unrecognized"):
+        ReplicateT2VProvider._sniff_video(b"not-a-video")
+
+
+@pytest.mark.asyncio
+async def test_replicate_video_maps_prompt_duration_and_ratio(monkeypatch):
+    from app.core.config import get_settings
+    from app.services.ai.base import Scene, Storyboard
+    from app.services.ai.replicate_t2v_provider import ReplicateT2VProvider
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "REPLICATE_API_TOKEN", "unit" + "-token")
+    provider = ReplicateT2VProvider()
+    storyboard = Storyboard(
+        title="Neon rain",
+        scenes=[
+            Scene(index=1, description="rain", image_prompt="rain", duration_seconds=4),
+            Scene(index=2, description="neon", image_prompt="neon", duration_seconds=6),
+        ],
+    )
+
+    seen: dict = {}
+
+    async def fake_create(model: str, model_input: dict) -> dict:
+        seen["model"] = model
+        seen["input"] = model_input
+        return {"id": "prediction-1", "status": "starting"}
+
+    async def fake_await(prediction: dict) -> object:
+        return "https://replicate.delivery/output.mp4"
+
+    async def fake_download(url: str) -> bytes:
+        seen["url"] = url
+        return b"\x00\x00\x00\x18ftypmp42" + b"x" * 2000
+
+    monkeypatch.setattr(provider, "_create_prediction", fake_create)
+    monkeypatch.setattr(provider, "_await_prediction", fake_await)
+    monkeypatch.setattr(provider, "_download_video", fake_download)
+
+    result = await provider.generate_video(storyboard, "9:16", "cinematic")
+
+    assert seen["model"] == settings.REPLICATE_T2V_MODEL
+    assert seen["input"]["duration"] == 10
+    assert seen["input"]["ratio"] == "9:16"
+    assert "Neon rain" in seen["input"]["prompt"]
+    assert result.extension == "mp4"
+    assert result.content_type == "video/mp4"
+    assert result.duration_seconds == 10

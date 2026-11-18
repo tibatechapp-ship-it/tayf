@@ -39,6 +39,7 @@ pipeline in-process, which keeps the suite deterministic.
 | Models/schemas | `backend/app/models/`, `backend/app/schemas/` | tables vs wire contracts, kept separate |
 | Providers | `backend/app/services/ai/` | one adapter per vendor behind one interface |
 | Storage | `backend/app/services/storage/` | neutral keys, `store/get/exists/delete/iter`, fresh signed URLs, TTL cleanup |
+| Reporting | `backend/app/services/cost_report.py` | ledger totals + proof-event timing; never fabricates currency amounts |
 | Frontend | `frontend/src/{views,services,i18n,styles}` | no business rules, zero mock data |
 
 ## 3. Generation lifecycle
@@ -56,6 +57,9 @@ pipeline in-process, which keeps the suite deterministic.
 6. SSE endpoint streams `progress`/`done` events using a 5-minute HMAC ticket;
    the frontend falls back to 4-second polling.
 7. Any failure emits a full refund ledger entry with a unique operation key.
+8. The cost dashboard reads the ledger for charged/refunded credits and the
+   hash-chained proof events for stage duration and provider/model usage; scene
+   credits are attributed to the `keyframes` or `video` stage.
 
 ## 4. Concurrency and recovery
 

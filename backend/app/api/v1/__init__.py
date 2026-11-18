@@ -2,6 +2,7 @@
 
 from app.api.v1.endpoints import (
     auth_router,
+    costs_router,
     credits_router,
     files_router,
     jobs_router,
@@ -10,6 +11,7 @@ from app.api.v1.endpoints import (
 
 __all__ = [
     "auth_router",
+    "costs_router",
     "credits_router",
     "files_router",
     "jobs_router",

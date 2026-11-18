@@ -323,6 +323,10 @@ async def run_job_pipeline(
                         "video_size_bytes": len(video.video_bytes),
                     },
                     verification={"allowed": True, "checker": "provider"},
+                    cost={
+                        "credits": job.credits_charged,
+                        "basis": "scene_generation",
+                    },
                 )
                 video_bytes = video.video_bytes
                 video_duration = video.duration_seconds
@@ -423,7 +427,6 @@ async def run_job_pipeline(
                 stage="store",
                 started_at=store_started,
                 outputs={"result_url": result_url, "thumbnail_url": thumbnail_url},
-                cost={"credits": job.credits_charged},
                 verification={"allowed": True, "checker": "storage"},
             )
             record_job_terminal(GenerationStatus.COMPLETED.value)
@@ -475,6 +478,10 @@ async def run_job_pipeline(
                 inputs={"aspect": job.aspect, "scenes": job.num_scenes},
                 outputs={"keyframes_stored": len(frames)},
                 verification={"allowed": True, "checker": "provider"},
+                cost={
+                    "credits": job.credits_charged,
+                    "basis": "scene_generation",
+                },
             )
             if job.require_approvals:
                 if not _hold(
@@ -579,7 +586,6 @@ async def run_job_pipeline(
             stage="store",
             started_at=store_started,
             outputs={"result_url": result_url, "thumbnail_url": thumbnail_url},
-            cost={"credits": job.credits_charged},
             verification={"allowed": True, "checker": "storage"},
         )
         record_job_terminal(GenerationStatus.COMPLETED.value)

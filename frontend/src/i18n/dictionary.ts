@@ -26,6 +26,14 @@ export interface Copy {
   logout: string;
   balance: string;
   creditsUnit: string;
+  topUp: string;
+  topUpTitle: string;
+  topUpHint: string;
+  topUpBuy: string;
+  topUpBusy: string;
+  topUpUnavailable: string;
+  topUpErrorPrefix: string;
+  close: string;
   serverError: string;
 
   // projects
@@ -127,6 +135,14 @@ export const copy: Record<Lang, Copy> = {
     logout: "خروج",
     balance: "الرصيد",
     creditsUnit: "رصيد",
+    topUp: "شحن الرصيد",
+    topUpTitle: "اختر حزمة رصيد",
+    topUpHint: "تتم إضافة الرصيد تلقائيًا بعد تأكيد Stripe للدفع.",
+    topUpBuy: "دفع",
+    topUpBusy: "جارٍ فتح صفحة الدفع…",
+    topUpUnavailable: "المدفوعات غير مفعّلة على هذا الخادم",
+    topUpErrorPrefix: "تعذّر بدء الدفع",
+    close: "إغلاق",
     serverError: "تعذر الاتصال بالخادم",
 
     projects: "المشاريع",
@@ -225,6 +241,14 @@ export const copy: Record<Lang, Copy> = {
     logout: "Sign out",
     balance: "Balance",
     creditsUnit: "credits",
+    topUp: "Top up",
+    topUpTitle: "Choose a credit package",
+    topUpHint: "Credits are added automatically after Stripe confirms the payment.",
+    topUpBuy: "Pay",
+    topUpBusy: "Opening checkout…",
+    topUpUnavailable: "Payments are not enabled on this server",
+    topUpErrorPrefix: "Could not start checkout",
+    close: "Close",
     serverError: "Cannot reach the server",
 
     projects: "Projects",

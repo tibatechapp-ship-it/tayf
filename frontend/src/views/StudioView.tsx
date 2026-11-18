@@ -5,8 +5,10 @@ import {
   cancelJob,
   createJob,
   createProject,
+  createTopUpCheckout,
   fetchCredits,
   fetchJob,
+  fetchTopUpPackages,
   fetchStreamTicket,
   getToken,
   listJobs,
@@ -16,6 +18,7 @@ import {
   type JobProgressEvent,
   type LedgerEntry,
   type Project,
+  type TopUpPackage,
 } from "../services/api";
 
 interface Props {
@@ -59,6 +62,11 @@ export default function StudioView({
   const [jobError, setJobError] = useState<string | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[] | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [topUpPackages, setTopUpPackages] = useState<TopUpPackage[]>([]);
+  const [topUpConfigured, setTopUpConfigured] = useState(false);
+  const [showTopUp, setShowTopUp] = useState(false);
+  const [topUpBusy, setTopUpBusy] = useState(false);
+  const [topUpError, setTopUpError] = useState<string | null>(null);
 
   const token = getToken() ?? "";
   const pollTimer = useRef<number | null>(null);
@@ -195,6 +203,22 @@ export default function StudioView({
     syncStreams(jobs.filter((job) => ACTIVE_STATUSES.has(job.status)));
   }, [jobs, syncStreams]);
 
+  useEffect(() => {
+    let alive = true;
+    fetchTopUpPackages()
+      .then((data) => {
+        if (!alive) return;
+        setTopUpPackages(data.packages);
+        setTopUpConfigured(data.configured);
+      })
+      .catch(() => {
+        if (alive) setTopUpConfigured(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   async function handleCreateProject(event: React.FormEvent) {
     event.preventDefault();
     if (!newName.trim() || creatingProject) return;
@@ -264,6 +288,22 @@ export default function StudioView({
     }
   }
 
+  async function handleTopUp(packageName: string) {
+    if (topUpBusy) return;
+    setTopUpBusy(true);
+    setTopUpError(null);
+    try {
+      const checkout = await createTopUpCheckout(token, packageName);
+      window.location.assign(checkout.checkout_url);
+    } catch (err) {
+      setTopUpError(
+        `${t.topUpErrorPrefix}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setTopUpBusy(false);
+    }
+  }
+
   function ledgerReason(reason: string): string {
     const map: Record<string, string> = {
       signup_bonus: t.ledgerSignup,
@@ -304,6 +344,16 @@ export default function StudioView({
           <span className="balance-chip" title={t.balance} data-testid="balance">
             {t.balance}: <strong>{balance}</strong> {t.creditsUnit}
           </span>
+          {topUpConfigured && (
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => setShowTopUp(true)}
+              data-testid="topup-open"
+            >
+              {t.topUp}
+            </button>
+          )}
           <button type="button" className="ghost" onClick={onLangSwitch}>
             {t.switchLabel}
           </button>
@@ -589,6 +639,51 @@ export default function StudioView({
           )}
         </section>
       </div>
+
+      {showTopUp && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t.topUpTitle}
+          onClick={() => setShowTopUp(false)}
+          data-testid="topup-dialog"
+        >
+          <div className="modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <h2>{t.topUpTitle}</h2>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => setShowTopUp(false)}
+                aria-label={t.close}
+              >
+                {t.close}
+              </button>
+            </div>
+            <p className="hint">{t.topUpHint}</p>
+            {topUpError && <p className="panel panel-error">{topUpError}</p>}
+            <div className="topup-options">
+              {topUpPackages.map((packageOption) => (
+                <button
+                  key={packageOption.name}
+                  type="button"
+                  className="topup-option"
+                  disabled={topUpBusy}
+                  onClick={() => void handleTopUp(packageOption.name)}
+                  data-testid={`topup-${packageOption.name}`}
+                >
+                  <strong>{packageOption.credits} {t.creditsUnit}</strong>
+                  <span dir="ltr">
+                    {(packageOption.price_cents / 100).toFixed(2)} {packageOption.currency.toUpperCase()}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {topUpBusy && <p className="hint">{t.topUpBusy}</p>}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -3,13 +3,13 @@
 # using `scripts/dev.sh` (plain uvicorn) which stays the primary target.
 
 # --- stage 1: wheels ---------------------------------------------------------
-FROM python:3.12-slim AS build
+FROM python:3.15-slim AS build
 WORKDIR /app
 COPY requirements.txt requirements-s3.txt ./
 RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt -r requirements-s3.txt
 
 # --- stage 2: runtime --------------------------------------------------------
-FROM python:3.12-slim
+FROM python:3.15-slim
 # ffmpeg is REQUIRED for real MP4 composition (services/compose.py).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \

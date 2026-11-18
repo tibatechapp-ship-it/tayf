@@ -7,6 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 ## [Unreleased]
 
 ### Added
+- Verifiable per-stage proof: an append-only, hash-chained trail of inputs, provider/model version, runtime, cost and per-stage verification verdicts. `GET /api/v1/jobs/{id}/proof` returns the canonical document, a public SHA-256 hash and an HMAC authenticity tag; the studio shows an AR/EN proof panel with chain integrity. Migration `f6a8c3e2b4d7`.
 - Live job progress over Server-Sent Events: short-lived signed stream tickets, `GET /api/v1/jobs/{id}/events`, persisted `progress`/`stage` fields, and an AR/EN progress bar in the studio (PR #9, merged `aee89ae`).
 - `JobProgressEvent` wire schema and migration `e5a9c7b1d3f4` for existing databases.
 - Native text-to-video provider (`AI_PROVIDER=replicate_t2v`): real LLM storyboard plus MiniMax H3 Highspeed motion video through Replicate REST; the vendor MP4 is stored directly and no per-scene stills are fabricated.

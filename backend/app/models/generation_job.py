@@ -66,6 +66,8 @@ class GenerationJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     stage: Mapped[str] = mapped_column(
         String(32), default="queued", server_default=text("'queued'"), nullable=False
     )
+    # Append-only, hash-chained per-stage proof (see app/core/job_proof.py).
+    proof_events: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
 
     # --- durable queue ownership (Phase 2) ---
     worker_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

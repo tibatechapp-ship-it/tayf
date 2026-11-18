@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import get_current_user
+from app.core import job_proof
 from app.core.config import get_settings
 from app.core.metrics import record_job_terminal
 from app.core.ratelimit import job_rate_limit
@@ -26,7 +27,15 @@ from app.core.stream_tickets import issue_stream_ticket, verify_stream_ticket
 from app.db.session import get_session
 from app.models import GenerationJob, GenerationStatus, Project, User
 from app.repositories import job_repository
-from app.schemas.job import JobCreateIn, JobOut, JobProgressEvent, StreamTicketOut
+from app.schemas.job import (
+    JobCreateIn,
+    JobOut,
+    JobProofOut,
+    JobProgressEvent,
+    ProofChainOut,
+    ProofEventOut,
+    StreamTicketOut,
+)
 from app.services import credits, job_state
 from app.services.pipeline import run_job_pipeline
 
@@ -194,6 +203,31 @@ def get_job(job_id: uuid.UUID, current_user: CurrentUser, session: SessionDep) -
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="المهمة غير موجودة")
     return JobOut.from_model(job)
+
+
+@router.get(
+    "/jobs/{job_id}/proof",
+    response_model=JobProofOut,
+    summary="Verifiable per-stage proof (inputs, model, timings, cost, verdicts)",
+    responses={404: {"description": "Job not found or not owned by this user"}},
+)
+def get_job_proof(
+    job_id: uuid.UUID, current_user: CurrentUser, session: SessionDep
+) -> JobProofOut:
+    job = job_repository.get_job_owned_by(session, job_id, current_user.id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="المهمة غير موجودة")
+    document = job_proof.build_document(job)
+    events = document["events"]
+    return JobProofOut(
+        job_id=job.id,
+        proof_version=job_proof.PROOF_VERSION,
+        document=document,
+        events=[ProofEventOut.model_validate(event) for event in events],
+        document_hash=job_proof.document_hash(document),
+        signature=job_proof.sign_document(document),
+        chain=ProofChainOut.model_validate(job_proof.verify_events(events)),
+    )
 
 
 def _stream_snapshot(

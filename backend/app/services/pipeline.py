@@ -14,14 +14,17 @@ progress. Every step commits, so a restart can only lose the current step.
 
 import asyncio
 import copy
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.session import SessionLocal
+from app.core import job_proof
 from app.core.metrics import record_job_terminal
 from app.core.safety import get_safety_layer
+from app.db.session import SessionLocal
 from app.models import GenerationJob, GenerationStatus
+from app.models.base import utc_now
 from app.services import job_state
 from app.services.ai.factory import get_ai_provider
 from app.services.compose import ComposerError, compose_video, extract_thumbnail
@@ -54,6 +57,39 @@ def _progress(db: Session, job: GenerationJob, percent: int, stage: str) -> None
     db.commit()
 
 
+def _proof(
+    db: Session,
+    job: GenerationJob,
+    *,
+    stage: str,
+    started_at: datetime,
+    inputs: dict | None = None,
+    outputs: dict | None = None,
+    verification: dict | None = None,
+    cost: dict | None = None,
+) -> None:
+    """Append a proof event. Bookkeeping never fails the actual generation."""
+    try:
+        job_proof.append_event(
+            job,
+            seq=len(job.proof_events or []) + 1,
+            stage=stage,
+            started_at=started_at,
+            finished_at=utc_now(),
+            inputs=inputs,
+            outputs=outputs,
+            verification=verification,
+            cost=cost,
+            provider_name=job.provider_name,
+            model_version=job.model_version,
+            simulated=job.simulated,
+        )
+        db.commit()
+    except Exception as exc:  # pragma: no cover - proof is strictly additive
+        db.rollback()
+        print(f"[proof] could not record stage '{stage}': {exc}")
+
+
 async def run_job_pipeline(
     job_id: str | UUID, *, claimed_by: str | None = None, should_stop=None
 ) -> None:
@@ -83,6 +119,7 @@ async def run_job_pipeline(
         job.model_version = str(getattr(provider, "model_version", "") or "")
         job.simulated = bool(provider.simulated)
         db.commit()
+        storyboard_started = utc_now()
         _progress(db, job, 10, "storyboard")
 
         # ---- 1) storyboard (real or simulated by provider) ----
@@ -93,14 +130,51 @@ async def run_job_pipeline(
             return
         if _cancelled(db, job, should_stop):  # user cancelled while the storyboard was generating
             return
+        _proof(
+            db,
+            job,
+            stage="storyboard",
+            started_at=storyboard_started,
+            inputs={"prompt": job.prompt, "num_scenes": job.num_scenes, "style": job.style},
+            outputs={"title": storyboard.title, "scene_count": len(storyboard.scenes)},
+            verification={"allowed": True, "checker": "provider"},
+        )
 
         # ---- 2) safety screen the AI-produced text as well ----
+        safety_started = utc_now()
         _progress(db, job, 30, "safety")
+        scenes_checked = 0
         for scene in storyboard.scenes:
             verdict = safety.check_text_block(f"{scene.description} {scene.image_prompt}")
+            scenes_checked += 1
             if not verdict.allowed:
+                _proof(
+                    db,
+                    job,
+                    stage="safety_text",
+                    started_at=safety_started,
+                    inputs={"scenes_checked": scenes_checked},
+                    verification={
+                        "allowed": False,
+                        "checker": "safety.text",
+                        "reason": verdict.reason,
+                        "category": verdict.category,
+                    },
+                )
                 _fail(db, job, verdict.reason or "blocked by safety layer", verdict.category)
                 return
+        _proof(
+            db,
+            job,
+            stage="safety_text",
+            started_at=safety_started,
+            inputs={"scenes_checked": scenes_checked},
+            verification={
+                "allowed": True,
+                "checker": "safety.text",
+                "scenes_checked": scenes_checked,
+            },
+        )
 
         scenes_payload = [
             {
@@ -122,6 +196,7 @@ async def run_job_pipeline(
 
         # ---- 3a) native text-to-video: vendor renders motion directly ----
         if provider.supports_native_video:
+            video_started = utc_now()
             _progress(db, job, 70, "composing")
             try:
                 video = await provider.generate_video(storyboard, job.aspect, job.style)
@@ -130,12 +205,47 @@ async def run_job_pipeline(
                 return
             if _cancelled(db, job, should_stop):
                 return
+            _proof(
+                db,
+                job,
+                stage="video",
+                started_at=video_started,
+                inputs={"aspect": job.aspect, "style": job.style},
+                outputs={
+                    "duration_seconds": video.duration_seconds,
+                    "video_size_bytes": len(video.video_bytes),
+                },
+                verification={"allowed": True, "checker": "provider"},
+            )
 
+            artifact_started = utc_now()
             _progress(db, job, 85, "storing")
             verdict = safety.check_artifact(len(video.video_bytes))
             if not verdict.allowed:
+                _proof(
+                    db,
+                    job,
+                    stage="safety_artifact",
+                    started_at=artifact_started,
+                    inputs={"video_size_bytes": len(video.video_bytes)},
+                    verification={
+                        "allowed": False,
+                        "checker": "safety.artifact",
+                        "reason": verdict.reason,
+                        "category": verdict.category,
+                    },
+                )
                 _fail(db, job, verdict.reason or "artifact failed post-check", verdict.category)
                 return
+            _proof(
+                db,
+                job,
+                stage="safety_artifact",
+                started_at=artifact_started,
+                inputs={"video_size_bytes": len(video.video_bytes)},
+                verification={"allowed": True, "checker": "safety.artifact"},
+            )
+            store_started = utc_now()
             result_url = storage.put_bytes(
                 f"jobs/{job.id}/video.{video.extension}", video.video_bytes, video.content_type
             )
@@ -161,6 +271,15 @@ async def run_job_pipeline(
             ):
                 return
             db.commit()
+            _proof(
+                db,
+                job,
+                stage="store",
+                started_at=store_started,
+                outputs={"result_url": result_url, "thumbnail_url": thumbnail_url},
+                cost={"credits": job.credits_charged},
+                verification={"allowed": True, "checker": "storage"},
+            )
             record_job_terminal(GenerationStatus.COMPLETED.value)
             print(
                 f"[pipeline] job {job_id} completed via native T2V "
@@ -169,6 +288,7 @@ async def run_job_pipeline(
             )
             return
 
+        keyframes_started = utc_now()
         _progress(db, job, 40, "keyframes")
 
         # ---- 3b) keyframe path (stored for the gallery) ----
@@ -191,6 +311,17 @@ async def run_job_pipeline(
         # from the committed one (shared nested objects would compare equal).
         job.storyboard = copy.deepcopy({"title": storyboard.title, "scenes": scenes_payload})
         db.commit()
+        _proof(
+            db,
+            job,
+            stage="keyframes",
+            started_at=keyframes_started,
+            inputs={"aspect": job.aspect, "scenes": job.num_scenes},
+            outputs={"keyframes_stored": len(frames)},
+            verification={"allowed": True, "checker": "provider"},
+        )
+
+        compose_started = utc_now()
         _progress(db, job, 70, "composing")
 
         # ---- 4) compose real MP4 (CPU-bound -> thread) ----
@@ -201,14 +332,45 @@ async def run_job_pipeline(
             return
         if _cancelled(db, job, should_stop):  # cancelled while ffmpeg was running
             return
+        _proof(
+            db,
+            job,
+            stage="compose",
+            started_at=compose_started,
+            inputs={"aspect": job.aspect, "frames": len(frames)},
+            outputs={"duration_seconds": result.duration_seconds},
+            verification={"allowed": True, "checker": "compose"},
+        )
 
         # ---- 5) post-generation safety + store artifacts ----
+        artifact_started = utc_now()
         _progress(db, job, 85, "storing")
         verdict = safety.check_artifact(len(result.video_bytes))
         if not verdict.allowed:
+            _proof(
+                db,
+                job,
+                stage="safety_artifact",
+                started_at=artifact_started,
+                inputs={"video_size_bytes": len(result.video_bytes)},
+                verification={
+                    "allowed": False,
+                    "checker": "safety.artifact",
+                    "reason": verdict.reason,
+                    "category": verdict.category,
+                },
+            )
             _fail(db, job, verdict.reason or "artifact failed post-check", verdict.category)
             return
-
+        _proof(
+            db,
+            job,
+            stage="safety_artifact",
+            started_at=artifact_started,
+            inputs={"video_size_bytes": len(result.video_bytes)},
+            verification={"allowed": True, "checker": "safety.artifact"},
+        )
+        store_started = utc_now()
         result_url = storage.put_bytes(
             f"jobs/{job.id}/video.mp4", result.video_bytes, "video/mp4"
         )
@@ -232,6 +394,15 @@ async def run_job_pipeline(
             # cancel/fail won while the artifact was being stored
             return
         db.commit()
+        _proof(
+            db,
+            job,
+            stage="store",
+            started_at=store_started,
+            outputs={"result_url": result_url, "thumbnail_url": thumbnail_url},
+            cost={"credits": job.credits_charged},
+            verification={"allowed": True, "checker": "storage"},
+        )
         record_job_terminal(GenerationStatus.COMPLETED.value)
         print(
             f"[pipeline] job {job_id} completed ({result.duration_seconds}s, "

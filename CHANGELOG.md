@@ -4,6 +4,27 @@ All notable changes to **Tayf Studio** are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 `0.x` while the product is pre-1.0.
 
+## [0.6.0] — 2026-11-18
+
+### Added
+- Durable job queue: leased claims, heartbeats, stale-job recovery and an external `python -m app.worker` runner (PR #6).
+- Atomic job state transitions with guarded refunds and cancellation checkpoints (PR #2).
+- Refresh-token registry with SHA-256 digests, rotation, family revocation on reuse and `POST /auth/logout` (PR #7).
+- CI coverage gate (80%) plus dependency/SAST scanners: pip-audit, bandit and report-only semgrep.
+- `backend/tests/__init__.py` makes local test collection immune to unrelated `tests` packages on `PYTHONPATH`.
+
+### Security
+- Trusted-proxy-only `X-Forwarded-For` parsing closes client-IP spoofing of rate limits (PR #5).
+- Refresh tokens are now HttpOnly `SameSite=strict` cookies scoped to `/api/v1/auth`; access tokens live in memory only.
+- Default bind addresses fail closed: backend and ai-gateway use loopback unless deployment explicitly exposes them.
+- Gateway requires `AI_GATEWAY_TOKEN` on any non-loopback bind; pillow bumped to patched 13.x.
+
+### Changed
+- Breaking API: `/auth/refresh` no longer accepts a token in the JSON body; auth responses no longer contain `refresh_token`.
+- `TRUSTED_PROXIES` must list every proxy allowed to set `X-Forwarded-For`.
+- `docker compose up` now fails fast unless `AI_GATEWAY_TOKEN` is set in `.env`.
+- `EXTERNAL_JOB_WORKER=true` in compose; the API leaves jobs `PENDING` for the worker.
+
 ## [0.5.0] — 2026-11-01
 
 ### Added

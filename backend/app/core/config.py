@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     RATELIMIT_WINDOW_SECONDS: int = 60
     RATELIMIT_AUTH_LIMIT: int = 10  # register/login/refresh attempts per window
     RATELIMIT_JOB_LIMIT: int = 30  # generation jobs created per window
+    # Only these peers may set X-Forwarded-For (IPs or CIDRs). Empty = ignore it.
+    TRUSTED_PROXIES: str = "127.0.0.1,::1"
 
     # --- Artifact URL signing (local storage) ---
     # false -> /files URLs require a short-lived HMAC signature (secure default)
@@ -89,6 +91,10 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def trusted_proxies_list(self) -> list[str]:
+        return [p.strip() for p in self.TRUSTED_PROXIES.split(",") if p.strip()]
 
     @property
     def jwt_secret_effective(self) -> str:

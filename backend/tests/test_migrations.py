@@ -46,6 +46,7 @@ def test_upgrade_creates_every_table(db_url: str) -> None:
         "projects",
         "generation_jobs",
         "credit_ledger",
+        "refresh_tokens",
     }
     assert "ON DELETE CASCADE" in projects_ddl
     assert "CHECK (status IN ('draft', 'active', 'archived'))" in projects_ddl

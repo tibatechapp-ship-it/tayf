@@ -2,13 +2,13 @@
 
 - Passwords: argon2-cffi (Argon2id), never stored or logged in plaintext.
 - Access tokens: HS256 JWT with `sub` (user UUID), `iat`, `exp`, `type=access`.
-- Refresh tokens: HS256 JWT with `type=refresh` and a longer lifetime; each
-  refresh call rotates the pair (old refresh stays valid until expiry —
-  stateless rotation; server-side revocation lists are future work).
+- Refresh tokens: HS256 JWT with `type=refresh`, a `jti` for uniqueness and a
+  longer lifetime. Their SHA-256 digest is tracked in `refresh_tokens`, so a
+  rotation is single-use and logout/replay can revoke the whole family.
 """
 
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import jwt
 from argon2 import PasswordHasher
@@ -31,14 +31,22 @@ def verify_password(plain: str, password_hash: str) -> bool:
 
 
 def create_access_token(user_id: UUID, expires_minutes: int | None = None) -> str:
-    return _encode_token(user_id, settings.JWT_EXPIRES_MINUTES, "access")
+    ttl = expires_minutes if expires_minutes is not None else settings.JWT_EXPIRES_MINUTES
+    return _encode_token(user_id, ttl, "access")
 
 
 def create_refresh_token(user_id: UUID) -> str:
-    return _encode_token(user_id, settings.JWT_REFRESH_EXPIRES_DAYS * 24 * 60, "refresh")
+    return _encode_token(
+        user_id,
+        settings.JWT_REFRESH_EXPIRES_DAYS * 24 * 60,
+        "refresh",
+        jti=str(uuid4()),
+    )
 
 
-def _encode_token(user_id: UUID, ttl_minutes: int, token_type: str) -> str:
+def _encode_token(
+    user_id: UUID, ttl_minutes: int, token_type: str, jti: str | None = None
+) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),
@@ -46,6 +54,8 @@ def _encode_token(user_id: UUID, ttl_minutes: int, token_type: str) -> str:
         "exp": int((now + timedelta(minutes=ttl_minutes)).timestamp()),
         "type": token_type,
     }
+    if jti is not None:
+        payload["jti"] = jti
     return jwt.encode(payload, settings.jwt_secret_effective, algorithm="HS256")
 
 

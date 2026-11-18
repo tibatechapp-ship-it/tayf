@@ -1,8 +1,10 @@
-"""Refresh-token flow: rotation, type separation, and abuse rejection."""
+"""Refresh sessions: HttpOnly cookie, single-use rotation, revocation."""
 
+from app.api.v1.endpoints.auth import REFRESH_COOKIE
+from app.core.security import create_access_token, create_refresh_token, decode_access_token
 from app.db.session import SessionLocal
 from app.models import User
-from app.core.security import create_refresh_token
+from app.services.refresh_tokens import hash_refresh_token
 
 
 def _register(client, username: str) -> dict:
@@ -18,8 +20,15 @@ def _register(client, username: str) -> dict:
     return response.json()
 
 
-def _refresh(client, token: str):
-    return client.post("/api/v1/auth/refresh", json={"refresh_token": token})
+def _refresh(client):
+    return client.post("/api/v1/auth/refresh")
+
+
+def _set_cookie(client, value: str) -> None:
+    client.cookies.clear()
+    client.cookies.set(
+        REFRESH_COOKIE, value, domain=client.base_url.host, path="/api/v1/auth"
+    )
 
 
 def _with_db(fn):
@@ -31,29 +40,45 @@ def _with_db(fn):
         db.close()
 
 
-def test_register_returns_refresh_token(client):
-    data = _register(client, "refresher")
-    assert data["refresh_token"]
-    assert data["access_token"] != data["refresh_token"]
+def test_register_sets_httponly_strict_cookie_only(client):
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "cookie@example.com",
+            "username": "cookie",
+            "password": "Sup3rSecret!",
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.cookies.get(REFRESH_COOKIE)
+    assert "refresh_token" not in response.json()
+    set_cookie = response.headers.get("set-cookie", "").lower()
+    assert "httponly" in set_cookie
+    assert "samesite=strict" in set_cookie
+    assert "path=/api/v1/auth" in set_cookie
 
 
-def test_refresh_rotates_both_tokens(client):
-    data = _register(client, "rotator")
-    response = _refresh(client, data["refresh_token"])
+def test_refresh_rotates_via_cookie_and_hides_token(client):
+    _register(client, "rotator")
+    old = client.cookies.get(REFRESH_COOKIE)
+    response = _refresh(client)
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["access_token"]
-    assert body["refresh_token"]
+    assert "refresh_token" not in body
     assert body["user"]["username"] == "rotator"
     assert body["balance"] == 100
+    assert client.cookies.get(REFRESH_COOKIE) != old
 
 
 def test_refreshed_access_token_works(client):
     _register(client, "worker")
     data = _register(client, "worker2")
-    refreshed = _refresh(client, data["refresh_token"]).json()
+    refreshed = _refresh(client).json()
+    assert data["user"]["username"] == "worker2"
     response = client.get(
-        "/api/v1/auth/me", headers={"Authorization": f"Bearer {refreshed['access_token']}"}
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {refreshed['access_token']}"},
     )
     assert response.status_code == 200
     assert response.json()["user"]["username"] == "worker2"
@@ -61,30 +86,69 @@ def test_refreshed_access_token_works(client):
 
 def test_access_token_cannot_refresh(client):
     data = _register(client, "typeguard")
-    assert _refresh(client, data["access_token"]).status_code == 401
+    _set_cookie(client, data["access_token"])
+    assert _refresh(client).status_code == 401
 
 
 def test_refresh_token_cannot_authorize_api(client):
-    data = _register(client, "reversal")
+    _register(client, "reversal")
+    raw = client.cookies.get(REFRESH_COOKIE)
     response = client.get(
-        "/api/v1/auth/me", headers={"Authorization": f"Bearer {data['refresh_token']}"}
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {raw}"}
     )
     assert response.status_code == 401
 
 
-def test_garbage_and_tampered_refresh_rejected(client):
-    data = _register(client, "tamper")
-    assert _refresh(client, "not-a-jwt-at-all").status_code == 401
-    tampered = data["refresh_token"][:-4] + "AAAA"
-    assert _refresh(client, tampered).status_code == 401
+def test_garbage_and_tampered_cookies_rejected(client):
+    _register(client, "tamper")
+    assert _refresh(client).status_code == 200
+    _set_cookie(client, "not-a-jwt-at-all")
+    assert _refresh(client).status_code == 401
+    raw = client.cookies.get(REFRESH_COOKIE)
+    client.cookies.clear()
+    _register(client, "tamper2")
+    tampered = client.cookies.get(REFRESH_COOKIE)[:-4] + "AAAA"
+    assert tampered != raw
+    _set_cookie(client, tampered)
+    assert _refresh(client).status_code == 401
 
 
-def test_empty_refresh_body_rejected(client):
-    assert client.post("/api/v1/auth/refresh", json={"refresh_token": ""}).status_code == 422
+def test_missing_cookie_rejected(client):
+    assert _refresh(client).status_code == 401
+
+
+def test_reuse_of_rotated_token_revokes_whole_family(client):
+    _register(client, "replay")
+    old = client.cookies.get(REFRESH_COOKIE)
+    assert _refresh(client).status_code == 200
+    current = client.cookies.get(REFRESH_COOKIE)
+    assert current != old
+
+    _set_cookie(client, old)
+    assert _refresh(client).status_code == 401  # theft detected
+
+    _set_cookie(client, current)
+    assert _refresh(client).status_code == 401  # family is dead
+
+
+def test_logout_revokes_session_and_clears_cookie(client):
+    data = _register(client, "leaver")
+    response = client.post(
+        "/api/v1/auth/logout",
+        headers={"Authorization": f"Bearer {data['access_token']}"},
+    )
+    assert response.status_code == 200, response.text
+    assert client.cookies.get(REFRESH_COOKIE) is None
+    assert _refresh(client).status_code == 401
+
+
+def test_logout_requires_access_token(client):
+    _register(client, "anonlogout")
+    assert client.post("/api/v1/auth/logout").status_code == 401
 
 
 def test_refresh_for_inactive_user_rejected(client):
-    data = _register(client, "sleeper")
+    _register(client, "sleeper")
 
     def deactivate(db):
         user = db.query(User).filter(User.username == "sleeper").one()
@@ -92,39 +156,60 @@ def test_refresh_for_inactive_user_rejected(client):
         db.commit()
 
     _with_db(deactivate)
-    assert _refresh(client, data["refresh_token"]).status_code == 401
+    assert _refresh(client).status_code == 401
 
 
 def test_refresh_of_deleted_user_rejected(client):
-    data = _register(client, "ghost")
+    _register(client, "ghost")
 
     def delete_user(db):
         db.query(User).filter(User.username == "ghost").delete()
         db.commit()
 
     _with_db(delete_user)
-    assert _refresh(client, data["refresh_token"]).status_code == 401
+    assert _refresh(client).status_code == 401
 
 
-def test_minted_refresh_token_roundtrip(client):
-    """A directly minted refresh token (same secret) refreshes its own user."""
-    data = _register(client, "target")
+def test_untracked_minted_token_rejected(client):
+    """A valid JWT that was never issued by the server is not a session."""
+    data = _register(client, "minted")
 
     def mint(db):
-        user = db.query(User).filter(User.username == "target").one()
+        user = db.query(User).filter(User.username == "minted").one()
         return create_refresh_token(user.id)
 
-    minted = _with_db(mint)
-    response = _refresh(client, minted)
-    assert response.status_code == 200
-    assert response.json()["user"]["id"] == data["user"]["id"]
+    raw = _with_db(mint)
+    assert data["user"]["username"] == "minted"
+    _set_cookie(client, raw)
+    assert _refresh(client).status_code == 401
 
 
-def test_login_response_carries_refresh_token(client):
+def test_login_sets_cookie_without_body_token(client):
     _register(client, "pairing")
     response = client.post(
         "/api/v1/auth/login",
         json={"username_or_email": "pairing", "password": "Sup3rSecret!"},
     )
     assert response.status_code == 200
-    assert response.json().get("refresh_token")
+    assert response.cookies.get(REFRESH_COOKIE)
+    assert "refresh_token" not in response.json()
+
+
+def test_refresh_digest_never_equals_raw_token(client):
+    data = _register(client, "digest")
+    assert data["access_token"]
+    raw = client.cookies.get(REFRESH_COOKIE)
+    assert hash_refresh_token(raw) != raw
+    assert len(hash_refresh_token(raw)) == 64
+
+
+def test_access_token_expiry_override_is_respected():
+    from uuid import uuid4
+
+    token = create_access_token(uuid4(), expires_minutes=1)
+    payload = decode_access_token(token)
+    assert payload is not None
+    import jwt
+
+    decoded = jwt.decode(token, options={"verify_signature": False})
+    assert decoded["exp"] - decoded["iat"] == 60

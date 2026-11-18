@@ -29,15 +29,12 @@ class UserOut(BaseModel):
 
 
 class TokenOut(BaseModel):
+    # The refresh token is delivered as an HttpOnly cookie only. Keeping it out
+    # of every response body is what stops page JavaScript from stealing it.
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
     user: UserOut
     balance: int
-
-
-class RefreshIn(BaseModel):
-    refresh_token: str = Field(min_length=10, max_length=4096)
 
 
 class MeOut(BaseModel):

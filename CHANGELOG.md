@@ -7,11 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 ## [Unreleased]
 
 ### Added
-- Live job progress over Server-Sent Events: short-lived signed stream tickets, `GET /api/v1/jobs/{id}/events`, persisted `progress`/`stage` fields, and an AR/EN progress bar in the studio (PR #9, in review).
+- Live job progress over Server-Sent Events: short-lived signed stream tickets, `GET /api/v1/jobs/{id}/events`, persisted `progress`/`stage` fields, and an AR/EN progress bar in the studio (PR #9, merged `aee89ae`).
 - `JobProgressEvent` wire schema and migration `e5a9c7b1d3f4` for existing databases.
+- Native text-to-video provider (`AI_PROVIDER=replicate_t2v`): real LLM storyboard plus MiniMax H3 Highspeed motion video through Replicate REST; the vendor MP4 is stored directly and no per-scene stills are fabricated.
 
 ### Security
 - SSE uses a 5-minute HMAC capability ticket bound to one user and one job; native `EventSource` never needs the Bearer token in the URL.
+- Replicate output downloads are accepted only from `replicate.delivery` hosts, with container sniffing and a configurable size cap.
 
 ## [0.6.0] — 2026-11-18
 

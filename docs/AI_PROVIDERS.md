@@ -9,6 +9,7 @@ ever presented as real AI output.
 | `mock` (default) | fabricated locally from the prompt | gradient placeholders stamped **SIMULATED KEYFRAME (MOCK PROVIDER - NOT REAL AI)** | **true** | nothing — works offline, Termux/tests/CI |
 | `zai_gateway` | real LLM JSON storyboard | real image-model renders (PNG/JPEG detected by magic bytes) | **false** | the `ai-gateway` sidecar running on 127.0.0.1:3030 |
 | `openai_compatible` | real chat-completions JSON storyboard | real `images/generations` output | **false** | `OPENAI_BASE_URL` + `OPENAI_API_KEY` in `.env` (bring your own key) |
+| `replicate_t2v` | real LLM JSON storyboard on Replicate | **native text-to-video** from MiniMax H3 Highspeed; no fabricated keyframes | **false** | `REPLICATE_API_TOKEN` in `.env` (bring your own key) |
 | `safety` | — | — | — | not a provider: it is the bookkeeping name used when the pre-filter rejects a prompt before any charge |
 
 ## Verified evidence (2026-10-31)
@@ -43,6 +44,34 @@ AI_PROVIDER=openai_compatible
 OPENAI_BASE_URL=https://api.openai.com/v1     # or OpenRouter / local server
 OPENAI_API_KEY=sk-...
 ```
+
+### Native text-to-video via Replicate
+
+`AI_PROVIDER=replicate_t2v` uses two real Replicate models: an LLM for the
+storyboard and MiniMax H3 Highspeed for the motion video. The pipeline takes a
+separate branch for this provider: it does **not** render per-scene keyframes
+and does **not** run the ffmpeg keyframe composer. The vendor MP4 is downloaded
+from `replicate.delivery`, sniffed to confirm a real MP4/WebM container,
+size-capped, safety-checked, and stored as the job artifact. A real thumbnail
+is extracted from that video with ffmpeg when ffmpeg is available.
+
+Scene `image_url` values stay `null` on this path — Tayf does not fabricate
+stills the vendor never returned. `simulated=false` is set only because the
+motion media itself is real.
+
+```bash
+AI_PROVIDER=replicate_t2v
+REPLICATE_API_TOKEN=<your token>
+REPLICATE_STORYBOARD_MODEL=meta/meta-llama-3.1-8b-instruct
+REPLICATE_T2V_MODEL=minimax/h3-highspeed
+# Optional: REPLICATE_T2V_VERSION=<64-char version hash or short hash>
+REPLICATE_POLL_SECONDS=2
+REPLICATE_PREDICTION_TIMEOUT=900
+```
+
+Replicate REST calls use `POST /v1/predictions` with `{"version": ..., "input": ...}`
+and poll `urls.get` until a terminal status. Files are only accepted from
+`replicate.delivery` hosts. No SDK dependency was added.
 
 ## Design rules
 

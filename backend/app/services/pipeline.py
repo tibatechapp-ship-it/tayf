@@ -24,7 +24,7 @@ from app.core.safety import get_safety_layer
 from app.models import GenerationJob, GenerationStatus
 from app.services import job_state
 from app.services.ai.factory import get_ai_provider
-from app.services.compose import ComposerError, compose_video
+from app.services.compose import ComposerError, compose_video, extract_thumbnail
 from app.services.storage.factory import get_storage
 
 
@@ -116,11 +116,62 @@ async def run_job_pipeline(
         # in place by the keyframe step below; if the committed attribute value
         # shared that nested list, SQLAlchemy's old==new check would never see
         # a difference and the image_url update would silently vanish.
-        job.storyboard = copy.deepcopy({"title": storyboard.title, "scenes": scenes_payload})
+        storyboard_payload = copy.deepcopy({"title": storyboard.title, "scenes": scenes_payload})
+        job.storyboard = copy.deepcopy(storyboard_payload)
         db.commit()
+
+        # ---- 3a) native text-to-video: vendor renders motion directly ----
+        if provider.supports_native_video:
+            _progress(db, job, 70, "composing")
+            try:
+                video = await provider.generate_video(storyboard, job.aspect, job.style)
+            except Exception as exc:
+                _fail(db, job, f"native video generation failed: {exc}")
+                return
+            if _cancelled(db, job, should_stop):
+                return
+
+            _progress(db, job, 85, "storing")
+            verdict = safety.check_artifact(len(video.video_bytes))
+            if not verdict.allowed:
+                _fail(db, job, verdict.reason or "artifact failed post-check", verdict.category)
+                return
+            result_url = storage.put_bytes(
+                f"jobs/{job.id}/video.{video.extension}", video.video_bytes, video.content_type
+            )
+            try:
+                thumbnail_bytes = await asyncio.to_thread(extract_thumbnail, video.video_bytes)
+            except Exception:  # thumbnails are best-effort; the video is the artifact
+                thumbnail_bytes = None
+            thumbnail_url = (
+                storage.put_bytes(
+                    f"jobs/{job.id}/thumb.jpg", thumbnail_bytes, "image/jpeg"
+                )
+                if thumbnail_bytes
+                else None
+            )
+            if not job_state.complete(
+                db,
+                job.id,
+                result_url=result_url,
+                thumbnail_url=thumbnail_url,
+                video_size_bytes=len(video.video_bytes),
+                duration_seconds=video.duration_seconds,
+                storyboard=storyboard_payload,
+            ):
+                return
+            db.commit()
+            record_job_terminal(GenerationStatus.COMPLETED.value)
+            print(
+                f"[pipeline] job {job_id} completed via native T2V "
+                f"({video.duration_seconds}s, {len(video.video_bytes)} bytes, "
+                f"provider={provider.name}, simulated={provider.simulated})"
+            )
+            return
+
         _progress(db, job, 40, "keyframes")
 
-        # ---- 3) keyframes per scene (stored for the gallery) ----
+        # ---- 3b) keyframe path (stored for the gallery) ----
         frames: list[tuple[bytes, float]] = []
         try:
             for scene in storyboard.scenes:

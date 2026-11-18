@@ -88,6 +88,28 @@ def _probe_duration(ffprobe: str | None, path: Path) -> float | None:
         return None
 
 
+def extract_thumbnail(video_bytes: bytes) -> bytes | None:
+    """Grab a real JPEG frame from a vendor video. Best-effort, no fabrication."""
+    ffmpeg = _resolve_binary("ffmpeg")
+    if not ffmpeg:
+        return None
+    with tempfile.TemporaryDirectory(prefix="vf_thumb_") as tmp:
+        work = Path(tmp)
+        video_path = work / "input.mp4"
+        video_path.write_bytes(video_bytes)
+        thumb = work / "thumb.jpg"
+        try:
+            _run([
+                ffmpeg, "-y", "-ss", "0.1", "-i", str(video_path),
+                "-frames:v", "1", "-q:v", "4", str(thumb),
+            ])
+        except ComposerError:
+            return None
+        if not thumb.is_file() or thumb.stat().st_size == 0:
+            return None
+        return thumb.read_bytes()
+
+
 def compose_video(frames: list[tuple[bytes, float]], aspect: str) -> ComposeResult:
     """frames: list of (image_bytes, per-scene duration seconds), in order."""
     if not frames:

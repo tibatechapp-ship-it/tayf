@@ -22,9 +22,9 @@
 | T-13 | 4 | **Real AI generation** via zai_gateway | TESTED | `simulated=false` artifacts: real storyboard + JPEG keyframes + MP4 | 2026-10-31: MP4 2.59MB/10.5s from LLM storyboard + 2 real keyframes (wall ≈126s) |
 | T-14 | 4 | ai-gateway sidecar (localhost-only) | TESTED | `/health` + real `/v1/chat`; token optional on loopback, REQUIRED on non-loopback binds | `GATEWAY-OK` round-trip verified |
 | T-15 | 4 | CI restored (trigger bug fix) | TESTED | `on.push.branches=[main]` valid; ffmpeg installed for compose tests | was `branches: ain]` → CI never ran on main |
-| T-16 | 5 | WebSocket/SSE live progress | IMPLEMENTED | UI updates without polling | SSE ticket + `/events`; 4s poll kept as fallback (PR #9, in review) |
+| T-16 | 5 | WebSocket/SSE live progress | TESTED | UI updates without polling | PR #9 merged `aee89ae`; CI `44250457711` / `44252990910`; 158 passed, 82.87%; 4s poll kept as fallback |
 | T-17 | 5 | Dedicated worker + queue | PARTIALLY_FIXED | leased queue + recovery shipped; remaining P0 audit items tracked below | PR #6 merged `602eca16` |
-| T-18 | 5 | Real video provider (text-to-video) | NOT_STARTED | same interface, `simulated=false` MP4 from vendor model | behind `services/ai/base.py` |
+| T-18 | 5 | Real video provider (text-to-video) | IMPLEMENTED | same interface, `simulated=false` MP4 from vendor model | PR #10: `replicate_t2v` + native pipeline branch + docs; awaiting CI evidence |
 | T-19 | 5 | Payments/top-ups on the ledger | NOT_STARTED | purchase → `grant` with receipt reason | ledger already audit-ready |
 | T-20 | 5 | Moderation API + rate limiting | NOT_STARTED | external screening beside local term list | safety layer is the seam |
 | T-21 | 5 | Session hardening (HttpOnly refresh + revocation) | TESTED | cookie-only refresh, digest registry, replay revokes family, logout | PR #7 merged `50a54800`; CI `44220060409` / `44220548636` |
@@ -36,6 +36,7 @@
 
 > كل تحديث حالة يسجّل سطرًا: التاريخ، ما الذي اختُبر فعليًا، وملاحظات.
 
+- **2026-11-18 — البث الحي ومزوّد الفيديو الأصلي (T-16، T-18):** PR #9 SSE اتنفذ واتدمج (`ba1eed6` → `aee89ae`)؛ CI `44250457711` و`44252990910` أخضران: 158 passed، coverage 82.87%. PR #10 يضيف `replicate_t2v` بمسار native T2V مستقل؛ الفرع `feat/native-t2v-replicate` بانتظار نتائج CI.
 - **2026-11-18 — دفعة الأمان والتشغيل (T-17، T-21…T-24):** تسليم ودمج PR #5 (XFF), PR #6 (طابور/worker), PR #7 (جلسات HttpOnly قابلة للإلغاء)، ثم هذه الدفعة (docs + CI + ai-gateway + fail-closed binds):
   - PR #5: `f32cf6d3fdcf5c9bf1f046e32b730494db63ba93`; CI `44207984241` — 139 passed.
   - PR #6: `602eca1699d63fb1b40a4fadfb25250f804cc06c`; CI `44214430604` — 146 passed. Smoke: `SMOKE PASS`, `RECOVERY SMOKE PASS`, `attempts=2`.

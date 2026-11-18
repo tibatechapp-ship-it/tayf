@@ -21,8 +21,13 @@ def get_ai_provider() -> AIProvider:
         from app.services.ai.openai_provider import OpenAICompatibleProvider
 
         return OpenAICompatibleProvider()
+    if provider == "replicate_t2v":
+        from app.services.ai.replicate_t2v_provider import ReplicateT2VProvider
+
+        return ReplicateT2VProvider()
     raise ProviderError(
-        f"Unknown AI_PROVIDER='{provider}'. Expected: mock | zai_gateway | openai_compatible"
+        "Unknown AI_PROVIDER="
+        f"'{provider}'. Expected: mock | zai_gateway | openai_compatible | replicate_t2v"
     )
 
 

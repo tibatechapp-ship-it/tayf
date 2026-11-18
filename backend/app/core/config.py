@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     # mock            -> offline, clearly-simulated output (tests / no keys)
     # zai_gateway     -> real LLM storyboard + real keyframes via ai-gateway sidecar
     # openai_compatible -> any OpenAI-compatible API (bring your own key)
+    # replicate_t2v   -> real LLM storyboard + native text-to-video via Replicate
     AI_PROVIDER: str = "mock"
     AI_GATEWAY_URL: str = "http://127.0.0.1:3030"
     AI_GATEWAY_TOKEN: str = ""
@@ -73,6 +74,15 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str = ""
     OPENAI_API_KEY: str = ""
     OPENAI_IMAGE_SIZE: str = "1344x768"
+    # Replicate native T2V (AI_PROVIDER=replicate_t2v)
+    REPLICATE_API_TOKEN: str = ""
+    REPLICATE_STORYBOARD_MODEL: str = "meta/meta-llama-3.1-8b-instruct"
+    REPLICATE_T2V_MODEL: str = "minimax/h3-highspeed"
+    # Optional full version hash for versioned/community models; empty uses the official model.
+    REPLICATE_T2V_VERSION: str = ""
+    REPLICATE_POLL_SECONDS: float = 2.0
+    REPLICATE_PREDICTION_TIMEOUT: int = 900
+    REPLICATE_MAX_VIDEO_BYTES: int = 200 * 1024 * 1024
 
     # --- Storage ---
     # local -> files on disk (Termux default) | s3 -> any S3-compatible (MinIO etc.)

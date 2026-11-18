@@ -65,19 +65,54 @@ class KeyframeResult:
     content_type: str
 
 
+@dataclass(frozen=True)
+class VideoResult:
+    video_bytes: bytes
+    extension: str  # "mp4" | "webm"
+    content_type: str
+    duration_seconds: float
+
+
 class AIProvider(ABC):
     """Abstract provider - swap implementations via AI_PROVIDER env."""
 
     name: str = "abstract"
     simulated: bool = True
 
+    @property
+    def supports_native_video(self) -> bool:
+        """True only when the provider renders motion video itself."""
+        return False
+
     @abstractmethod
     async def generate_storyboard(self, prompt: str, num_scenes: int, style: str) -> Storyboard:
         """Convert a free-text prompt into num_scenes structured scenes."""
 
-    @abstractmethod
     async def generate_keyframe(self, image_prompt: str, aspect: str) -> KeyframeResult:
-        """Render one still image for a scene description."""
+        """Render one still image for a scene description.
+
+        Native T2V providers do not fabricate separate keyframes; the pipeline
+        skips this step for them.
+        """
+        raise ProviderError(f"{self.name} does not render separate keyframes")
+
+    async def generate_video(
+        self, storyboard: Storyboard, aspect: str, style: str
+    ) -> VideoResult:
+        """Render motion video directly. Only native T2V providers override this."""
+        raise ProviderError(f"{self.name} does not support native text-to-video")
+
+    @staticmethod
+    def video_prompt(storyboard: Storyboard, style: str) -> str:
+        """Turn the approved storyboard into one self-contained T2V prompt."""
+        beats = "; ".join(
+            f"{s.index}. {s.description or s.image_prompt} ({s.duration_seconds:g}s)"
+            for s in storyboard.scenes
+        )
+        return (
+            f"{storyboard.title}. {beats}. "
+            f"Visual style: {style}. Single continuous cinematic shot sequence."
+        ).strip()
 
     # ---- shared helpers ----
 

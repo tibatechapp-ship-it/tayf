@@ -45,6 +45,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 - `docker compose up` now fails fast unless `AI_GATEWAY_TOKEN` is set in `.env`.
 - `EXTERNAL_JOB_WORKER=true` in compose; the API leaves jobs `PENDING` for the worker.
 - `APP_VERSION` and the version-endpoint test now report `0.6.0`, matching this changelog.
+- `main` is protected with strict required checks for the CI matrix, lint, typecheck, pre-commit, security scan, Docker, frontend and GitGuardian; force pushes and branch deletion are disabled.
 
 ## [0.5.0] — 2026-11-01
 

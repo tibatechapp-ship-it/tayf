@@ -10,12 +10,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 - Live job progress over Server-Sent Events: short-lived signed stream tickets, `GET /api/v1/jobs/{id}/events`, persisted `progress`/`stage` fields, and an AR/EN progress bar in the studio (PR #9, merged `aee89ae`).
 - `JobProgressEvent` wire schema and migration `e5a9c7b1d3f4` for existing databases.
 - Native text-to-video provider (`AI_PROVIDER=replicate_t2v`): real LLM storyboard plus MiniMax H3 Highspeed motion video through Replicate REST; the vendor MP4 is stored directly and no per-scene stills are fabricated.
-- Stripe credit top-ups: fixed server-owned packages, `POST /payments/topup/checkout-session` and a signed `POST /webhooks/stripe` that grants credits exactly once via the append-only ledger (PR #11, awaiting CI evidence).
+- Stripe credit top-ups: fixed server-owned packages, `POST /payments/topup/checkout-session` and a signed `POST /webhooks/stripe` that grants credits exactly once via the append-only ledger (PR #11, merged `ace0dac`; CI `44273690313` — 184 passed, 82.24%).
+- Optional external moderation seam (`MODERATION_API_URL`): prompts and AI-produced text are screened beside the local blocklist; transport errors and malformed verdicts reject by default (PR #12, CI `44281037955` — 197 passed, 82.57%).
 
 ### Security
 - SSE uses a 5-minute HMAC capability ticket bound to one user and one job; native `EventSource` never needs the Bearer token in the URL.
 - Replicate output downloads are accepted only from `replicate.delivery` hosts, with container sniffing and a configurable size cap.
 - Stripe webhooks are accepted only with a valid `v1` HMAC signature (raw body, 5-minute tolerance) and a paid session whose amount, currency and package match a server-side package; duplicate deliveries cannot double-grant credits.
+- External moderation is fail-closed: an unavailable service blocks the job with `moderation_unavailable` unless `MODERATION_FAIL_CLOSED=false` is an explicit operator decision.
 
 ## [0.6.0] — 2026-11-18
 

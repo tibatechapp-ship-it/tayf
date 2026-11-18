@@ -4,14 +4,16 @@ Pre-generation: blocks illegal / harmful prompts before any provider call.
 Post-generation: sanity-checks produced artifacts before delivery.
 
 The default term list is intentionally small and extendable via the
-SAFETY_EXTRA_BLOCKED_TERMS env variable. It is NOT a substitute for a
-production moderation API - it is the honest local minimum.
+SAFETY_EXTRA_BLOCKED_TERMS env variable. When MODERATION_API_URL is configured,
+an external moderator is consulted after the local checks; failures are
+fail-closed unless MODERATION_FAIL_CLOSED=false is explicitly set.
 """
 
 import re
 from dataclasses import dataclass
 
 from app.core.config import settings
+from app.core.moderation import ModerationClient, ModerationResult, get_moderation_client
 
 _DEFAULT_BLOCKED_TERMS: list[str] = [
     # child safety (absolute block, EN + AR)
@@ -36,6 +38,7 @@ _DEFAULT_BLOCKED_TERMS: list[str] = [
 ]
 
 _WHITESPACE_RE = re.compile(r"\s+")
+_UNSET = object()
 
 
 @dataclass(frozen=True)
@@ -46,14 +49,29 @@ class SafetyVerdict:
 
 
 class SafetyLayer:
-    """Stateless prompt/artifact screening. Kept dependency-free and testable."""
+    """Local term screening plus an optional external moderation verdict."""
 
-    def __init__(self, extra_terms: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        extra_terms: list[str] | None = None,
+        moderator: ModerationClient | None | object = _UNSET,
+    ) -> None:
         self.blocked_terms = sorted({*_DEFAULT_BLOCKED_TERMS, *(extra_terms or [])})
+        # ``None`` explicitly disables external moderation (useful in tests).
+        self.moderator = get_moderation_client() if moderator is _UNSET else moderator
 
     @property
     def max_prompt_chars(self) -> int:
         return settings.SAFETY_MAX_PROMPT_CHARS
+
+    def _external_verdict(self, normalized: str) -> ModerationResult | None:
+        checker = getattr(self.moderator, "check", None)
+        if checker is None:
+            return None
+        result = checker(normalized)
+        if result is None or result.allowed:
+            return None
+        return result
 
     def check_prompt(self, prompt: str) -> SafetyVerdict:
         text = (prompt or "").strip()
@@ -74,6 +92,10 @@ class SafetyLayer:
                     "blocked_term",
                     "يتضمن الوصف محتوى مرفوضًا وفق سياسة السلامة ولا يمكن توليده",
                 )
+
+        external = self._external_verdict(normalized)
+        if external is not None:
+            return SafetyVerdict(False, external.category, external.reason)
         return SafetyVerdict(True)
 
     def check_text_block(self, text: str) -> SafetyVerdict:

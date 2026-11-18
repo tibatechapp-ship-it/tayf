@@ -334,13 +334,13 @@ async def run_job_pipeline(
                     # Store a reviewable preview BEFORE the gate. On resume the
                     # same keys are read back instead of calling the vendor again.
                     video_key = f"jobs/{job.id}/video.{video_extension}"
-                    result_url = storage.put_bytes(video_key, video_bytes, video_content_type)
+                    result_url = storage.store_bytes(video_key, video_bytes, video_content_type)
                     try:
                         preview = await asyncio.to_thread(extract_thumbnail, video_bytes)
                     except Exception:
                         preview = None
                     thumbnail_url = (
-                        storage.put_bytes(f"jobs/{job.id}/thumb.jpg", preview, "image/jpeg")
+                        storage.store_bytes(f"jobs/{job.id}/thumb.jpg", preview, "image/jpeg")
                         if preview
                         else None
                     )
@@ -399,11 +399,11 @@ async def run_job_pipeline(
                 except Exception:
                     final_thumb = None
                 thumbnail_url = (
-                    storage.put_bytes(f"jobs/{job.id}/thumb.jpg", final_thumb, "image/jpeg")
+                    storage.store_bytes(f"jobs/{job.id}/thumb.jpg", final_thumb, "image/jpeg")
                     if final_thumb
                     else None
                 )
-            result_url = storage.put_bytes(
+            result_url = storage.store_bytes(
                 f"jobs/{job.id}/video.{video_extension}", video_bytes, video_content_type
             )
             if not job_state.complete(
@@ -454,7 +454,7 @@ async def run_job_pipeline(
                         return
                     keyframe = await provider.generate_keyframe(scene.image_prompt, job.aspect)
                     key = f"jobs/{job.id}/scene_{scene.index}.{keyframe.extension}"
-                    scenes_payload[scene.index - 1]["image_url"] = storage.put_bytes(
+                    scenes_payload[scene.index - 1]["image_url"] = storage.store_bytes(
                         key, keyframe.image_bytes, keyframe.content_type
                     )
                     frame_keys.append(key)
@@ -550,12 +550,12 @@ async def run_job_pipeline(
             verification={"allowed": True, "checker": "safety.artifact"},
         )
         store_started = utc_now()
-        result_url = storage.put_bytes(
+        result_url = storage.store_bytes(
             f"jobs/{job.id}/video.mp4", result.video_bytes, "video/mp4"
         )
         thumbnail_url = None
         if result.thumbnail_bytes:
-            thumbnail_url = storage.put_bytes(
+            thumbnail_url = storage.store_bytes(
                 f"jobs/{job.id}/thumb.jpg", result.thumbnail_bytes, "image/jpeg"
             )
         storyboard_payload = copy.deepcopy(

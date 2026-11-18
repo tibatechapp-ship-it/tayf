@@ -4,7 +4,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.core.config import settings
+from app.core.file_tokens import sign_file_url
 from app.services.storage.base import StorageBackend, StorageError, sanitize_key
+
+FILES_PREFIX = "/api/v1/files/"
 
 
 class LocalStorageBackend(StorageBackend):
@@ -21,11 +24,15 @@ class LocalStorageBackend(StorageBackend):
             raise StorageError(f"key escapes storage root: {key!r}")
         return path
 
-    def put_bytes(self, key: str, data: bytes, content_type: str) -> str:
+    def local_path(self, key: str) -> Path:
+        return self._path(key)
+
+    def store_bytes(self, key: str, data: bytes, content_type: str) -> str:
+        key = sanitize_key(key)
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
-        return self.url_for(key)
+        return key
 
     def get_bytes(self, key: str) -> bytes:
         path = self._path(key)
@@ -42,14 +49,12 @@ class LocalStorageBackend(StorageBackend):
             path.unlink()
 
     def iter_keys(self, prefix: str = "") -> list[str]:
-        base_prefix = str(self.base)
         keys: list[str] = []
         for path in self.base.rglob("*"):
             if path.is_file():
                 rel = str(path.relative_to(self.base))
                 if rel.startswith(prefix):
                     keys.append(rel)
-        del base_prefix
         return sorted(keys)
 
     def key_modified_at(self, key: str) -> datetime | None:
@@ -59,5 +64,7 @@ class LocalStorageBackend(StorageBackend):
         return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
 
     def url_for(self, key: str) -> str:
-        sanitize_key(key)
-        return f"/api/v1/files/{key}"
+        return f"{FILES_PREFIX}{sanitize_key(key)}"
+
+    def signed_url(self, key: str, ttl_seconds: int) -> str:
+        return sign_file_url(self.url_for(key), ttl_seconds=ttl_seconds) or self.url_for(key)

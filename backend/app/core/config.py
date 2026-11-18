@@ -96,6 +96,7 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str = ""
     S3_REGION: str = "us-east-1"
     STORAGE_TTL_DAYS: int = 7
+    STORAGE_SIGNED_URL_TTL_SECONDS: int = 6 * 60 * 60
     CLEANUP_INTERVAL_MINUTES: int = 60
 
     # --- Credits ---

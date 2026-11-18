@@ -79,8 +79,10 @@ unique operation key. Verify the ledger before re-running a failed job.
 ## Storage lifecycle
 
 - Artifacts live under `jobs/<job_id>/…`.
-- URLs are HMAC-signed and expire (`FILES_PUBLIC=false`).
-- `STORAGE_TTL_DAYS` controls cleanup; default is 7 days.
+- The database stores provider-neutral keys, not vendor URLs. Legacy URLs are still accepted on read.
+- URLs are minted fresh on every read and expire after `STORAGE_SIGNED_URL_TTL_SECONDS` (default 6 hours); local links use an HMAC token, S3-compatible links use native presigning (`FILES_PUBLIC=false`).
+- `STORAGE_TTL_DAYS` controls cleanup; default is 7 days. Keep the link TTL shorter than the cleanup TTL.
+- Switching `STORAGE_BACKEND` does not copy existing objects — keys are portable, but the target store must already contain them (or generate them again).
 - Back up the database and the storage volume together.
 
 ## Incident response

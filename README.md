@@ -39,7 +39,7 @@ credit system and content-safety screening.
 | مهام: فلترة أمان ← خصم رصيد ← خط إنتاج خلفي | `tests/test_pipeline.py` |
 | تجميع MP4 حقيقي (ffmpeg: zoompan + xfade + علامة مائية) | `tests/test_compose.py` |
 | رصيد: دفتر غير قابل للتعديل + مكافأة تسجيل + ردود فشل | `tests/test_credits.py` |
-| تخزين محلي أو S3 متوافق + تنظيف TTL | `tests/test_storage.py`, `tests/test_files.py` |
+| تخزين محايد (local / S3-compatible) بمفاتيح مستقلة عن المزود وروابط موقّعة طازجة + تنظيف TTL | `tests/test_storage.py`, `tests/test_neutral_storage.py`, `tests/test_files.py` |
 | أمان محتوى قبل/بعد التوليد | `tests/test_safety.py` |
 | هجرات مزدوجة الاتجاه + حراسة انحراف المخطط | `tests/test_migrations.py` |
 | رؤوس أمنية + `X-Request-ID` + نقطة `/version` | `tests/test_system.py` |

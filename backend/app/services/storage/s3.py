@@ -1,8 +1,8 @@
 """S3-compatible storage backend (MinIO locally, AWS S3/R2/DO remotely).
 
 Requires S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY, S3_SECRET_KEY in .env.
-Returned URLs are pre-signed GETs valid for STORAGE_TTL_DAYS (matching the
-auto-cleanup TTL, so links never outlive their artifact).
+URLs are generated fresh at read time with STORAGE_SIGNED_URL_TTL_SECONDS,
+so no provider URL is ever persisted in the job row.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -27,7 +27,6 @@ class S3StorageBackend(StorageBackend):
             raise StorageError("boto3 is not installed - add it to requirements") from exc
 
         self._bucket = settings.S3_BUCKET
-        self._ttl_days = max(settings.STORAGE_TTL_DAYS, 1)
         self._client = boto3.client(
             "s3",
             endpoint_url=settings.S3_ENDPOINT,
@@ -37,12 +36,10 @@ class S3StorageBackend(StorageBackend):
             config=Config(signature_version="s3v4"),
         )
 
-    def put_bytes(self, key: str, data: bytes, content_type: str) -> str:
+    def store_bytes(self, key: str, data: bytes, content_type: str) -> str:
         key = sanitize_key(key)
-        self._client.put_object(
-            Bucket=self._bucket, Key=key, Body=data, ContentType=content_type
-        )
-        return self.url_for(key)
+        self._client.put_object(Bucket=self._bucket, Key=key, Body=data, ContentType=content_type)
+        return key
 
     def get_bytes(self, key: str) -> bytes:
         key = sanitize_key(key)
@@ -78,16 +75,18 @@ class S3StorageBackend(StorageBackend):
         modified = head.get("LastModified")
         if modified is None:
             return None
-        if modified.tzinfo is None:  # boto3 usually returns tz-aware datetimes
+        if modified.tzinfo is None:
             modified = modified.replace(tzinfo=timezone.utc)
         return modified
 
     def url_for(self, key: str) -> str:
-        key = sanitize_key(key)
+        return self.signed_url(key, settings.STORAGE_SIGNED_URL_TTL_SECONDS)
+
+    def signed_url(self, key: str, ttl_seconds: int) -> str:
         return self._client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": self._bucket, "Key": key},
-            ExpiresIn=int(timedelta(days=self._ttl_days).total_seconds()),
+            Params={"Bucket": self._bucket, "Key": sanitize_key(key)},
+            ExpiresIn=max(int(ttl_seconds), 1),
         )
 
     def cleanup_expired(self, ttl_days: int) -> int:

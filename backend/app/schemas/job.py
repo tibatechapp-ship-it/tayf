@@ -6,8 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.file_tokens import sign_file_url
 from app.models.enums import GenerationStatus
+from app.services.storage.refs import artifact_url, sign_review
 
 STYLES = ["cinematic", "anime", "3d_render", "watercolor", "photorealistic", "noir"]
 
@@ -71,14 +71,14 @@ class JobOut(BaseModel):
     def from_model(cls, job) -> "JobOut":  # noqa: ANN001
         data = cls.model_validate(job)
         data.provider = job.provider_name
-        data.output_url = sign_file_url(job.result_url)
-        data.thumbnail_url = sign_file_url(job.thumbnail_url)
+        data.output_url = artifact_url(job.result_url)
+        data.thumbnail_url = artifact_url(job.thumbnail_url)
         data.approval_history = job.approval_history or []
         gate = job.pending_approval
         data.pending_approval = (
             {
                 "stage": gate.get("stage"),
-                "review": gate.get("review"),
+                "review": sign_review(gate.get("review")),
                 "requested_at": gate.get("requested_at"),
                 "decision": gate.get("decision"),
                 "note": gate.get("note"),
@@ -101,7 +101,7 @@ class JobOut(BaseModel):
                         index=index,
                         description=str(raw.get("description") or ""),
                         image_prompt=str(raw.get("image_prompt") or ""),
-                        image_url=sign_file_url(raw.get("image_url")),
+                        image_url=artifact_url(raw.get("image_url")),
                         duration_seconds=float(raw.get("duration_seconds") or 4.0),
                     )
                 )
@@ -161,8 +161,8 @@ class JobProgressEvent(BaseModel):
             stage=job.stage,
             error_message=job.error_message,
             rejection_reason=job.rejection_reason,
-            output_url=sign_file_url(job.result_url),
-            thumbnail_url=sign_file_url(job.thumbnail_url),
+            output_url=artifact_url(job.result_url),
+            thumbnail_url=artifact_url(job.thumbnail_url),
             approval_stage=(job.pending_approval or {}).get("stage")
             if isinstance(job.pending_approval, dict)
             else None,

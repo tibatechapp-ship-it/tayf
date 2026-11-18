@@ -20,7 +20,6 @@ from app.core.config import get_settings
 from app.core.file_tokens import verify_file_token
 from app.services.storage.base import StorageError
 from app.services.storage.factory import get_storage
-from app.services.storage.local import LocalStorageBackend
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -28,7 +27,7 @@ router = APIRouter(prefix="/files", tags=["files"])
 @router.get("/{key:path}", response_model=None)
 def get_file(key: str, exp: str | None = None, sig: str | None = None) -> FileResponse | RedirectResponse:
     storage = get_storage()
-    local = isinstance(storage, LocalStorageBackend)
+    local = storage.name == "local"
     # Signature enforcement only applies to the local backend (S3 pre-signs).
     if local and not get_settings().FILES_PUBLIC:
         if not verify_file_token(key, exp, sig):
@@ -38,8 +37,8 @@ def get_file(key: str, exp: str | None = None, sig: str | None = None) -> FileRe
             )
     try:
         if local:
-            path = (storage.base / key).resolve()
-            if not str(path).startswith(str(storage.base)) or not path.is_file():
+            path = storage.local_path(key)
+            if not path.is_file():
                 raise HTTPException(
                     status.HTTP_404_NOT_FOUND, detail="الملف غير موجود"
                 )

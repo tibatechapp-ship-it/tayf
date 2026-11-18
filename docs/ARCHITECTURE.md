@@ -38,7 +38,7 @@ pipeline in-process, which keeps the suite deterministic.
 | Persistence | `backend/app/repositories/` | only place with queries/ORM; ownership enforced here |
 | Models/schemas | `backend/app/models/`, `backend/app/schemas/` | tables vs wire contracts, kept separate |
 | Providers | `backend/app/services/ai/` | one adapter per vendor behind one interface |
-| Storage | `backend/app/services/storage/` | `put/get/exists/delete/iter` plus TTL cleanup |
+| Storage | `backend/app/services/storage/` | neutral keys, `store/get/exists/delete/iter`, fresh signed URLs, TTL cleanup |
 | Frontend | `frontend/src/{views,services,i18n,styles}` | no business rules, zero mock data |
 
 ## 3. Generation lifecycle

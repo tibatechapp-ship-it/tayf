@@ -29,6 +29,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 - Refresh-token registry with SHA-256 digests, rotation, family revocation on reuse and `POST /auth/logout` (PR #7).
 - CI coverage gate (80%) plus dependency/SAST scanners: pip-audit, bandit and report-only semgrep.
 - `backend/tests/__init__.py` makes local test collection immune to unrelated `tests` packages on `PYTHONPATH`.
+- Release workflow for `v*` tags: source archives, SHA-256 checksums, CycloneDX SBOM, build provenance and generated GitHub release notes; `workflow_dispatch` is a build-only dry run.
+- Grouped Dependabot updates for pip, npm, GitHub Actions and the three container images.
+- `docs/RELEASING.md` documents the tag checklist, dry run and patch-release policy.
 
 ### Security
 - Trusted-proxy-only `X-Forwarded-For` parsing closes client-IP spoofing of rate limits (PR #5).
@@ -41,6 +44,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 - `TRUSTED_PROXIES` must list every proxy allowed to set `X-Forwarded-For`.
 - `docker compose up` now fails fast unless `AI_GATEWAY_TOKEN` is set in `.env`.
 - `EXTERNAL_JOB_WORKER=true` in compose; the API leaves jobs `PENDING` for the worker.
+- `APP_VERSION` and the version-endpoint test now report `0.6.0`, matching this changelog.
 
 ## [0.5.0] — 2026-11-01
 

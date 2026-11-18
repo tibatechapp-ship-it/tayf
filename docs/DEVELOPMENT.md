@@ -43,7 +43,8 @@ make docs-build    # mkdocs build --strict
 ```
 
 `make ci` runs the local approximation of the full pipeline. CI is still the
-authoritative result.
+authoritative result. Tagging and artifact generation are documented in
+[Releasing](RELEASING.md).
 
 ## Local caveats
 

@@ -209,6 +209,33 @@ export interface JobProgressEvent {
   completed_at: string | null;
 }
 
+export interface ProofEvent {
+  seq: number;
+  stage: string;
+  started_at: string;
+  finished_at: string;
+  duration_ms: number;
+  provider_name: string;
+  model_version: string;
+  simulated: boolean;
+  inputs: Record<string, unknown>;
+  outputs: Record<string, unknown>;
+  verification: Record<string, unknown>;
+  cost: Record<string, unknown>;
+  prev_hash: string;
+  event_hash: string;
+}
+
+export interface JobProof {
+  job_id: string;
+  proof_version: number;
+  document: Record<string, unknown>;
+  events: ProofEvent[];
+  document_hash: string;
+  signature: string;
+  chain: { valid: boolean; count: number; broken_at: number | null };
+}
+
 export interface LedgerEntry {
   id: string;
   delta: number;
@@ -338,6 +365,10 @@ export function listJobs(token: string, projectId: string): Promise<Job[]> {
 
 export function fetchJob(token: string, jobId: string): Promise<Job> {
   return request<Job>(`/jobs/${jobId}`, { token });
+}
+
+export function fetchJobProof(token: string, jobId: string): Promise<JobProof> {
+  return request<JobProof>(`/jobs/${jobId}/proof`, { token });
 }
 
 export function cancelJob(token: string, jobId: string): Promise<Job> {

@@ -85,6 +85,22 @@ export interface Copy {
   stageRejected: string;
   stageCancelled: string;
 
+  // verifiable proof
+  proofTitle: string;
+  proofShow: string;
+  proofHide: string;
+  proofVerified: string;
+  proofTampered: string;
+  proofModel: string;
+  proofRuntime: string;
+  proofCost: string;
+  proofHash: string;
+  proofEmpty: string;
+  proofAllowed: string;
+  proofBlocked: string;
+  proofLoading: string;
+  proofError: string;
+
   // ledger + cancellation
   ledgerTitle: string;
   ledgerEmpty: string;
@@ -193,6 +209,21 @@ export const copy: Record<Lang, Copy> = {
     stageRejected: "مرفوضة",
     stageCancelled: "ملغاة",
 
+    proofTitle: "إثبات المراحل",
+    proofShow: "عرض الإثبات",
+    proofHide: "إخفاء الإثبات",
+    proofVerified: "سلسلة التحقق سليمة",
+    proofTampered: "تحذير: تعارض في سلسلة الإثبات",
+    proofModel: "النموذج",
+    proofRuntime: "الزمن",
+    proofCost: "التكلفة",
+    proofHash: "البصمة",
+    proofEmpty: "لا توجد مراحل مسجلة لهذه المهمة بعد.",
+    proofAllowed: "نجح التحقق",
+    proofBlocked: "تم المنع",
+    proofLoading: "جارٍ تحميل الإثبات…",
+    proofError: "تعذّر تحميل الإثبات",
+
     ledgerTitle: "دفتر الرصيد",
     ledgerEmpty: "لا حركات بعد.",
     ledgerSignup: "مكافأة التسجيل",
@@ -298,6 +329,21 @@ export const copy: Record<Lang, Copy> = {
     stageFailed: "Failed",
     stageRejected: "Rejected",
     stageCancelled: "Cancelled",
+
+    proofTitle: "Stage proof",
+    proofShow: "Show proof",
+    proofHide: "Hide proof",
+    proofVerified: "Verification chain intact",
+    proofTampered: "Warning: proof chain mismatch",
+    proofModel: "Model",
+    proofRuntime: "Runtime",
+    proofCost: "Cost",
+    proofHash: "Hash",
+    proofEmpty: "No stages recorded for this job yet.",
+    proofAllowed: "Verified",
+    proofBlocked: "Blocked",
+    proofLoading: "Loading proof…",
+    proofError: "Could not load proof",
 
     ledgerTitle: "Credit ledger",
     ledgerEmpty: "No movements yet.",

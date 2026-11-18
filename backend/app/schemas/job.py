@@ -138,3 +138,40 @@ class JobProgressEvent(BaseModel):
             thumbnail_url=sign_file_url(job.thumbnail_url),
             completed_at=job.completed_at,
         )
+
+
+class ProofEventOut(BaseModel):
+    """One hash-sealed stage entry from the job's append-only proof trail."""
+
+    seq: int
+    stage: str
+    started_at: str
+    finished_at: str
+    duration_ms: int
+    provider_name: str
+    model_version: str
+    simulated: bool
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    outputs: dict[str, Any] = Field(default_factory=dict)
+    verification: dict[str, Any] = Field(default_factory=dict)
+    cost: dict[str, Any] = Field(default_factory=dict)
+    prev_hash: str
+    event_hash: str
+
+
+class ProofChainOut(BaseModel):
+    valid: bool
+    count: int
+    broken_at: int | None = None
+
+
+class JobProofOut(BaseModel):
+    """A self-contained, verifiable proof document for one generation job."""
+
+    job_id: UUID
+    proof_version: int
+    document: dict[str, Any]
+    events: list[ProofEventOut]
+    document_hash: str
+    signature: str
+    chain: ProofChainOut

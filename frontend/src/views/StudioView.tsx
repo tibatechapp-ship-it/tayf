@@ -8,6 +8,7 @@ import {
   createTopUpCheckout,
   fetchCredits,
   fetchJob,
+  fetchJobProof,
   fetchTopUpPackages,
   fetchStreamTicket,
   getToken,
@@ -15,6 +16,7 @@ import {
   listProjects,
   subscribeJobEvents,
   type Job,
+  type JobProof,
   type JobProgressEvent,
   type LedgerEntry,
   type Project,
@@ -67,6 +69,11 @@ export default function StudioView({
   const [showTopUp, setShowTopUp] = useState(false);
   const [topUpBusy, setTopUpBusy] = useState(false);
   const [topUpError, setTopUpError] = useState<string | null>(null);
+
+  const [proofOpenId, setProofOpenId] = useState<string | null>(null);
+  const [proofs, setProofs] = useState<Record<string, JobProof>>({});
+  const [proofLoadingId, setProofLoadingId] = useState<string | null>(null);
+  const [proofError, setProofError] = useState<string | null>(null);
 
   const token = getToken() ?? "";
   const pollTimer = useRef<number | null>(null);
@@ -288,6 +295,25 @@ export default function StudioView({
     }
   }
 
+  async function handleToggleProof(jobId: string) {
+    if (proofOpenId === jobId) {
+      setProofOpenId(null);
+      return;
+    }
+    setProofOpenId(jobId);
+    setProofError(null);
+    if (proofs[jobId]) return;
+    setProofLoadingId(jobId);
+    try {
+      const proof = await fetchJobProof(token, jobId);
+      setProofs((current) => ({ ...current, [jobId]: proof }));
+    } catch (err) {
+      setProofError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setProofLoadingId(null);
+    }
+  }
+
   async function handleTopUp(packageName: string) {
     if (topUpBusy) return;
     setTopUpBusy(true);
@@ -329,6 +355,17 @@ export default function StudioView({
       cancelled: t.stageCancelled,
     };
     return map[stage] ?? stage;
+  }
+
+  function proofStageLabel(stage: string): string {
+    const extra: Record<string, string> = {
+      safety_text: t.stageSafety,
+      safety_artifact: t.stageSafety,
+      video: t.stageComposing,
+      compose: t.stageComposing,
+      store: t.stageStoring,
+    };
+    return extra[stage] ?? stageLabel(stage);
   }
 
   const selected = projects.find((p) => p.id === selectedId) ?? null;
@@ -538,7 +575,9 @@ export default function StudioView({
               <h3 className="jobs-title">{t.jobsTitle}</h3>
               {jobs.length === 0 && <p className="hint">{t.noJobs}</p>}
               <ul className="job-list" data-testid="job-list">
-                {jobs.map((job) => (
+                {jobs.map((job) => {
+                  const proof = proofs[job.id];
+                  return (
                   <li key={job.id} className={`card job status-${job.status}`}>
                     <div className="job-head">
                       <span className={`chip status-${job.status}`}>
@@ -551,6 +590,14 @@ export default function StudioView({
                       <span className={job.simulated ? "tag simulated" : "tag real"}>
                         {job.simulated ? t.simulatedBadge : t.realBadge}
                       </span>
+                      <button
+                        type="button"
+                        className="link proof-btn"
+                        onClick={() => void handleToggleProof(job.id)}
+                        data-testid={`proof-toggle-${job.id}`}
+                      >
+                        {proofOpenId === job.id ? t.proofHide : t.proofShow}
+                      </button>
                       {ACTIVE_STATUSES.has(job.status) && (
                         <button
                           type="button"
@@ -632,8 +679,49 @@ export default function StudioView({
                         </ol>
                       </div>
                     )}
+
+                    {proofOpenId === job.id && (
+                      <section className="proof-panel" data-testid={`proof-${job.id}`}>
+                        <h4>{t.proofTitle}</h4>
+                        {proofLoadingId === job.id && <p className="hint">{t.proofLoading}</p>}
+                        {proofError && <p className="panel panel-error">{proofError}</p>}
+                        {proof && (
+                          <>
+                            <p className={proof.chain.valid ? "tag real" : "tag simulated"}>
+                              {proof.chain.valid ? t.proofVerified : t.proofTampered}
+                            </p>
+                            <p className="hint" dir="ltr">
+                              {t.proofModel}: {String(proof.document.model_version ?? "-")} ·{" "}
+                              {t.proofRuntime}:{" "}
+                              {proof.events.reduce((sum, event) => sum + event.duration_ms, 0)} ms ·{" "}
+                              {t.proofCost}: {String(proof.document.credits_charged ?? 0)}{" "}
+                              {t.creditsUnit}
+                            </p>
+                            {proof.events.length === 0 && <p className="hint">{t.proofEmpty}</p>}
+                            <ol className="proof-events">
+                              {proof.events.map((event) => (
+                                <li key={event.seq}>
+                                  <span>{proofStageLabel(event.stage)}</span>{" "}
+                                  <span className={event.verification.allowed ? "tag real" : "tag simulated"}>
+                                    {event.verification.allowed ? t.proofAllowed : t.proofBlocked}
+                                  </span>{" "}
+                                  <em dir="ltr">{event.duration_ms} ms</em>
+                                  <code dir="ltr" className="proof-hash">
+                                    {event.event_hash.slice(0, 12)}
+                                  </code>
+                                </li>
+                              ))}
+                            </ol>
+                            <p className="hint" dir="ltr">
+                              {t.proofHash}: {proof.document_hash.slice(0, 24)}
+                            </p>
+                          </>
+                        )}
+                      </section>
+                    )}
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </>
           )}

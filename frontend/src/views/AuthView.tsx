@@ -33,7 +33,7 @@ export default function AuthView({ lang, onAuthenticated, onLangSwitch }: Props)
         mode === "register"
           ? await apiRegister({ email, username, password })
           : await apiLogin({ username_or_email: identifier, password });
-      setSession(data.access_token, data.refresh_token);
+      setSession(data.access_token);
       onAuthenticated(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

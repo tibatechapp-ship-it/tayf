@@ -7,45 +7,36 @@
 // ============================================================
 
 const API = "/api/v1";
-const TOKEN_KEY = "tayf.token";
-const REFRESH_KEY = "tayf.refresh";
 const TIMEOUT_MS = 15_000;
 
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
+// The access JWT lives in memory only (never localStorage): an XSS can at
+// worst read a short-lived token. The refresh JWT is an HttpOnly cookie that
+// JavaScript cannot read at all — the browser attaches it on refresh/logout.
+let accessToken: string | null = null;
 
-export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY);
+export function getToken(): string | null {
+  return accessToken;
 }
 
 export function setToken(token: string | null): void {
-  // Logging out (or losing the access token) clears the whole session.
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_KEY);
-  }
+  accessToken = token;
 }
 
-export function setSession(accessToken: string, refreshToken: string | null): void {
-  localStorage.setItem(TOKEN_KEY, accessToken);
-  if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken);
+export function setSession(token: string): void {
+  accessToken = token;
 }
 
 // Single-flight refresh: concurrent 401s share one /auth/refresh call.
 let refreshInFlight: Promise<string | null> | null = null;
 
 async function tryRefresh(): Promise<string | null> {
-  const refresh = getRefreshToken();
-  if (!refresh) return null;
   if (!refreshInFlight) {
-    refreshInFlight = request<TokenResponse>(
-      "/auth/refresh",
-      { method: "POST", body: { refresh_token: refresh }, allowRefresh: false },
-    )
+    refreshInFlight = request<TokenResponse>("/auth/refresh", {
+      method: "POST",
+      allowRefresh: false,
+    })
       .then((data) => {
-        setSession(data.access_token, data.refresh_token);
+        setToken(data.access_token);
         return data.access_token;
       })
       .catch(() => {
@@ -76,6 +67,7 @@ async function request<T>(
     response = await fetch(API + path, {
       method: options.method ?? "GET",
       signal: controller.signal,
+      credentials: "include", // sends the HttpOnly refresh cookie on /auth/*
       headers: {
         ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
         ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
@@ -136,7 +128,6 @@ export interface UserOut {
 
 export interface TokenResponse {
   access_token: string;
-  refresh_token: string;
   token_type: string;
   user: UserOut;
   balance: number;
@@ -302,10 +293,17 @@ export function cancelJob(token: string, jobId: string): Promise<Job> {
   return request<Job>(`/jobs/${jobId}/cancel`, { method: "POST", token });
 }
 
-export function refreshSession(refreshToken: string): Promise<TokenResponse> {
+export function refreshSession(): Promise<TokenResponse> {
   return request<TokenResponse>("/auth/refresh", {
     method: "POST",
-    body: { refresh_token: refreshToken },
+    allowRefresh: false,
+  });
+}
+
+export function logoutRequest(): Promise<{ status: string }> {
+  return request<{ status: string }>("/auth/logout", {
+    method: "POST",
+    token: accessToken,
     allowRefresh: false,
   });
 }

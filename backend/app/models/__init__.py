@@ -9,6 +9,7 @@ from app.models.credit_ledger import CreditLedger
 from app.models.enums import GenerationStatus, ProjectStatus
 from app.models.generation_job import GenerationJob
 from app.models.project import Project, enum_column
+from app.models.refresh_token import RefreshToken
 from app.models.user import User
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "GenerationJob",
     "GenerationStatus",
     "Project",
+    "RefreshToken",
     "ProjectStatus",
     "TimestampMixin",
     "UUIDPrimaryKeyMixin",

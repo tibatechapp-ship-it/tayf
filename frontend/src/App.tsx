@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { copy, type Lang } from "./i18n/dictionary";
 import {
-  fetchMe,
   fetchVersion,
-  getToken,
+  logoutRequest,
+  refreshSession,
   setToken,
   type TokenResponse,
 } from "./services/api";
@@ -36,15 +36,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) {
-      setReady(true);
-      return;
-    }
-    fetchMe(token)
-      .then((me) => {
-        setUsername(me.user.username);
-        setBalance(me.balance);
+    // No token in localStorage: restore the session from the HttpOnly cookie.
+    refreshSession()
+      .then((data) => {
+        setToken(data.access_token);
+        setUsername(data.user.username);
+        setBalance(data.balance);
       })
       .catch(() => setToken(null))
       .finally(() => setReady(true));
@@ -56,9 +53,13 @@ export default function App() {
   }
 
   function handleLogout() {
-    setToken(null);
-    setUsername(null);
-    setBalance(0);
+    logoutRequest()
+      .catch(() => undefined)
+      .finally(() => {
+        setToken(null);
+        setUsername(null);
+        setBalance(0);
+      });
   }
 
   function handleLangSwitch() {

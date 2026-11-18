@@ -11,8 +11,8 @@ FRONTEND := frontend
 DOCS := docs
 
 .PHONY: help bootstrap install install-dev install-frontend install-hooks clean \
-	test test-fast lint format-check typecheck frontend-build security docs-build docs-serve \
-	alembic-up alembic-down alembic-check dev e2e ci
+	test test-fast lint format-check typecheck backend-typecheck frontend-build precommit \
+	security docs-build docs-serve alembic-up alembic-down alembic-check dev e2e ci
 
 help: ## Show available targets
 	@printf 'Tayf Studio — developer commands\n\n'
@@ -22,7 +22,8 @@ help: ## Show available targets
 	@printf '  make test             Run the full backend suite with coverage gate\n'
 	@printf '  make test-fast        Run backend tests without coverage\n'
 	@printf '  make lint             Ruff check (the enforced lint gate)\n'
-	@printf '  make typecheck        Frontend strict TypeScript build\n'
+	@printf '  make typecheck        Backend mypy + frontend strict TS build\n'
+	@printf '  make precommit        Run all pre-commit hooks against the tree\n'
 	@printf '  make security         pip-audit + bandit\n'
 	@printf '  make docs-build       MkDocs strict build\n'
 	@printf '  make docs-serve       Serve docs locally on port 8001\n'
@@ -58,11 +59,17 @@ lint: ## Ruff check (enforced)
 format-check: ## Ruff format check (informational only, not a CI gate)
 	cd $(BACKEND) && ruff format --check app tests
 
-typecheck: ## Strict TypeScript typecheck
+backend-typecheck: ## Backend mypy check (scoped legacy baseline)
+	cd $(BACKEND) && mypy app
+
+typecheck: backend-typecheck ## Backend mypy + frontend strict TypeScript build
 	cd $(FRONTEND) && $(NPM) run build
 
-frontend-build: typecheck ## Build production frontend bundle
-	@printf 'frontend build completed by npm run build\n'
+frontend-build: ## Build production frontend bundle
+	cd $(FRONTEND) && $(NPM) run build
+
+precommit: ## Run all pre-commit hooks against the tree
+	pre-commit run --all-files --show-diff-on-failure
 
 security: ## Dependency and SAST checks
 	cd $(BACKEND) && pip-audit -r requirements.txt --progress-spinner off && bandit -r app -ll -q
@@ -89,7 +96,7 @@ e2e: ## Run the real-browser smoke test
 dev: ## Start the full development stack
 	./scripts/dev.sh start
 
-ci: lint typecheck test security docs-build ## Local approximation of the CI pipeline
+ci: lint typecheck precommit test security docs-build ## Local approximation of the CI pipeline
 
 clean: ## Remove caches and build artifacts
 	rm -rf $(BACKEND)/.pytest_cache $(BACKEND)/.coverage $(BACKEND)/htmlcov

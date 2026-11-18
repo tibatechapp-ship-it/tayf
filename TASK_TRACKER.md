@@ -31,6 +31,8 @@
 | T-22 | 5 | CI coverage gate + security scanners | TESTED | 80% floor, pip-audit, bandit, report-only semgrep | `.github/workflows/ci.yml` |
 | T-23 | 5 | Fail-closed binds + patched dependencies | TESTED | loopback defaults, gateway token on non-loopback, pillow 13.x | `test_config.py`; bandit/pip-audit local runs |
 | T-24 | 5 | Docs sync after security batches | TESTED | `CHANGELOG.md` 0.6.0 + this tracker | PR #8 batch; PR #11 evidence added in PR #12 |
+| T-25 | 5 | Google-grade docs and developer ergonomics | TESTED | Makefile, pre-commit, templates, strict MkDocs site | PR #13 merged `7a5f5ec`; PR CI `44288344791`; post-merge CI `44289243398` green |
+| T-26 | 5 | CI quality gates | IN_PROGRESS | Python matrix, mypy, pre-commit, pip-audit gate, docs workflow | Batch B in progress |
 
 ## سجل الأدلة (Evidence Log)
 
@@ -39,6 +41,7 @@
 - **2026-11-18 — البث الحي ومزوّد الفيديو الأصلي (T-16، T-18):** PR #9 SSE اتنفذ واتدمج (`ba1eed6` → `aee89ae`)؛ CI `44250457711` و`44252990910` أخضران: 158 passed، coverage 82.87%. PR #10 اتنفذ واتدمج (`954402a5` → `9ca417dd`)؛ CI `44269783202` و`44270553773` أخضران: 176 passed، coverage 82.56%.
 - **2026-11-18 — شحن الرصيد عبر Stripe (T-19):** PR #11 اتنفذ واتدمج (`d587eb10` → `ace0dac`): حزم ثابتة يملكها الخادم، checkout session، تحقق HMAC من webhook مع نافذة 5 دقائق، ومنح رصيد مرة واحدة عبر `operation_key="stripe:<sha256>"`. CI `44273690313` و`44277586069` أخضران: 184 passed، coverage 82.24%.
 - **2026-11-18 — تدقيق خارجي (T-20):** PR #12 (`23f737e1`) أضاف `core/moderation.py` كعميل HTTP اختياري بعد الفحص المحلي؛ القبول/الرفض من `allowed` أو `flagged`، والانقطاع يرفض المهمة افتراضيًا. CI `44281037955` أخضر: 197 passed، coverage 82.57%. محليًا: 13 moderation test ضمن 187-test subset، coverage 81.07%، `ruff check` و`bandit` نظيفان.
+- **2026-11-18 — تحسين المستودع (T-25):** PR #13 (`23ad2660` → `7a5f5ec`) أضاف `Makefile` وpre-commit وCODEOWNERS وقوالبissue/PR وموقع MkDocs صارم. CI `44288344791` وpost-merge `44289243398` أخضران؛ محليًا `mkdocs build --strict` وYAML parse و`make help` نظيفة.
 - **2026-11-18 — دفعة الأمان والتشغيل (T-17، T-21…T-24):** تسليم ودمج PR #5 (XFF), PR #6 (طابور/worker), PR #7 (جلسات HttpOnly قابلة للإلغاء)، ثم هذه الدفعة (docs + CI + ai-gateway + fail-closed binds):
   - PR #5: `f32cf6d3fdcf5c9bf1f046e32b730494db63ba93`; CI `44207984241` — 139 passed.
   - PR #6: `602eca1699d63fb1b40a4fadfb25250f804cc06c`; CI `44214430604` — 146 passed. Smoke: `SMOKE PASS`, `RECOVERY SMOKE PASS`, `attempts=2`.

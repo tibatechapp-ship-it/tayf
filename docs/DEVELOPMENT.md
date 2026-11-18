@@ -4,7 +4,7 @@
 
 | Tool | Minimum | Notes |
 | --- | --- | --- |
-| Python | 3.11 | 3.12 used in CI; 3.14 works locally with the documented caveats |
+| Python | 3.11 | CI matrix: 3.11 / 3.12 / 3.13; 3.14 works locally with caveats |
 | Node.js | 20 | npm lockfile is committed; use `npm ci` |
 | ffmpeg | any recent build | Required for real MP4 composition; `pkg install ffmpeg` on Termux |
 | make | any POSIX make | Optional but recommended |
@@ -35,8 +35,9 @@ Useful addresses:
 
 ```bash
 make lint          # ruff check — enforced in CI
-make test          # pytest with 80% coverage gate
-make typecheck     # frontend strict TS + build
+make typecheck     # mypy (scoped baseline) + frontend strict TS + build
+make precommit     # all hooks against the full tree
+make test          # pytest matrix with 80% coverage gate
 make security      # pip-audit + bandit
 make docs-build    # mkdocs build --strict
 ```
@@ -52,6 +53,9 @@ authoritative result.
   frontend job is authoritative.
 - `ruff format --check` is informational, not a CI gate: the repo has
   pre-existing line-length churn. Do not introduce new churn.
+- `mypy` checks 53 of 66 backend modules today. Thirteen legacy modules with
+  SQLAlchemy/HTTP typing debt are excluded explicitly in `backend/pyproject.toml`;
+  shrink that list, never grow it.
 
 ## Database migrations
 
@@ -79,7 +83,7 @@ All strings visible to users must exist in both `ar` and `en` inside
 
 ```bash
 make docs-serve      # http://127.0.0.1:8001
-make docs-build      # strict build, same as CI
+make docs-build      # strict build, same as CI and the Pages workflow
 ```
 
 ## Commit and PR conventions

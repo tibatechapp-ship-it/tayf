@@ -21,3 +21,41 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Alembic migrations must stay byte-stable for up/down fidelity.
 "migrations/*" = ["E", "F", "W", "B"]
+
+[tool.mypy]
+ignore_missing_imports = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+# Legacy typing baseline: these modules are excluded until their existing
+# SQLAlchemy/HTTP typing debt is cleaned up. New code in every other module
+# is checked by CI. Keep this list shrinking, never growing.
+exclude = [
+  "(^|/)app/models/(user|credit_ledger)\\.py$",
+  "(^|/)app/services/(job_queue|credits|job_state|payments|refresh_tokens|pipeline)\\.py$",
+  "(^|/)app/core/file_tokens\\.py$",
+  "(^|/)app/schemas/job\\.py$",
+  "(^|/)app/api/v1/endpoints/(files|projects|credits)\\.py$",
+]
+
+[[tool.mypy.overrides]]
+# `exclude` stops directory discovery but not imports from checked modules.
+# These overrides also suppress errors when legacy modules are imported.
+module = [
+  "app.models.user",
+  "app.models.credit_ledger",
+  "app.services.job_queue",
+  "app.services.credits",
+  "app.services.job_state",
+  "app.services.payments",
+  "app.services.refresh_tokens",
+  "app.services.pipeline",
+  "app.core.file_tokens",
+  "app.schemas.job",
+  "app.api.v1.endpoints.files",
+  "app.api.v1.endpoints.projects",
+  "app.api.v1.endpoints.credits",
+]
+follow_imports = "skip"
+ignore_errors = true

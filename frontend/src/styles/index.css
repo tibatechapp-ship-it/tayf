@@ -478,6 +478,31 @@ button:not(:disabled):hover {
   margin: 0.5rem 0;
 }
 
+.job-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.6rem 0;
+}
+
+.job-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--card-edge);
+  overflow: hidden;
+}
+
+.job-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.35s ease;
+}
+
+.job-progress-label {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
 .video-figure {
   margin: 0.6rem 0;
 }

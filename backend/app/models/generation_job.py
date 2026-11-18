@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UTCDateTime, UUIDPrimaryKeyMixin
@@ -59,6 +59,13 @@ class GenerationJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     safety_category: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Live progress mirror used by GET /jobs/{id} and the SSE event stream.
+    progress: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    stage: Mapped[str] = mapped_column(
+        String(32), default="queued", server_default=text("'queued'"), nullable=False
+    )
 
     # --- durable queue ownership (Phase 2) ---
     worker_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

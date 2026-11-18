@@ -47,6 +47,13 @@ def _cancelled(db: Session, job: GenerationJob, should_stop=None) -> bool:
     return bool(should_stop and should_stop())
 
 
+def _progress(db: Session, job: GenerationJob, percent: int, stage: str) -> None:
+    """Commit a live progress checkpoint for GET polling and the SSE stream."""
+    job.progress = percent
+    job.stage = stage
+    db.commit()
+
+
 async def run_job_pipeline(
     job_id: str | UUID, *, claimed_by: str | None = None, should_stop=None
 ) -> None:
@@ -76,6 +83,7 @@ async def run_job_pipeline(
         job.model_version = str(getattr(provider, "model_version", "") or "")
         job.simulated = bool(provider.simulated)
         db.commit()
+        _progress(db, job, 10, "storyboard")
 
         # ---- 1) storyboard (real or simulated by provider) ----
         try:
@@ -87,6 +95,7 @@ async def run_job_pipeline(
             return
 
         # ---- 2) safety screen the AI-produced text as well ----
+        _progress(db, job, 30, "safety")
         for scene in storyboard.scenes:
             verdict = safety.check_text_block(f"{scene.description} {scene.image_prompt}")
             if not verdict.allowed:
@@ -109,6 +118,7 @@ async def run_job_pipeline(
         # a difference and the image_url update would silently vanish.
         job.storyboard = copy.deepcopy({"title": storyboard.title, "scenes": scenes_payload})
         db.commit()
+        _progress(db, job, 40, "keyframes")
 
         # ---- 3) keyframes per scene (stored for the gallery) ----
         frames: list[tuple[bytes, float]] = []
@@ -130,6 +140,7 @@ async def run_job_pipeline(
         # from the committed one (shared nested objects would compare equal).
         job.storyboard = copy.deepcopy({"title": storyboard.title, "scenes": scenes_payload})
         db.commit()
+        _progress(db, job, 70, "composing")
 
         # ---- 4) compose real MP4 (CPU-bound -> thread) ----
         try:
@@ -141,6 +152,7 @@ async def run_job_pipeline(
             return
 
         # ---- 5) post-generation safety + store artifacts ----
+        _progress(db, job, 85, "storing")
         verdict = safety.check_artifact(len(result.video_bytes))
         if not verdict.allowed:
             _fail(db, job, verdict.reason or "artifact failed post-check", verdict.category)

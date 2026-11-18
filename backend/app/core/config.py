@@ -114,6 +114,12 @@ class Settings(BaseSettings):
     # --- Content safety ---
     SAFETY_MAX_PROMPT_CHARS: int = 2000
     SAFETY_EXTRA_BLOCKED_TERMS: str = ""  # comma-separated extra terms
+    # External moderation: POST {"text": ...} to this URL. Expected response
+    # {"allowed": bool, "category"?: str, "reason"?: str}; "flagged" is also accepted.
+    MODERATION_API_URL: str = ""
+    MODERATION_API_KEY: str = ""  # sent as Bearer token when set
+    MODERATION_TIMEOUT_SECONDS: float = 5.0
+    MODERATION_FAIL_CLOSED: bool = True  # outage = reject, never silently allow
 
     # ---------- helpers ----------
 

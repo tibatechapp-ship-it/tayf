@@ -42,7 +42,8 @@ Implemented and test-backed:
   `Referrer-Policy: no-referrer`, restrictive `Permissions-Policy` on every
   response; validated `X-Request-ID` propagation.
 - **Content safety**: pre- and post-generation screening with an extensible
-  blocklist (`SAFETY_EXTRA_BLOCKED_TERMS`).
+  blocklist (`SAFETY_EXTRA_BLOCKED_TERMS`), plus an optional external moderator
+  (`MODERATION_API_URL`) applied to prompts and AI-produced text.
 - **Secrets hygiene**: secrets live only in `.env` (never committed);
   CI runs tests with placeholder secrets only.
 
@@ -54,8 +55,12 @@ Honest limits (documented, not hidden):
 - The rate limiter is in-process: it resets on restart and does not span
   replicas. For multi-replica deployments, front the API with a limiter
   (nginx `limit_req`, Cloudflare, or swap the store for Redis).
-- JWTs are stateless: there is no server-side revocation list. Rotate
-  `JWT_SECRET` to invalidate all sessions at once.
+- Access JWTs remain stateless; refresh tokens are revocable via the SHA-256
+  digest registry, but a compromised `JWT_SECRET` still requires rotating it
+  to invalidate every access token at once.
+- External moderation is optional and operator-configured. When enabled and
+  unavailable, jobs are rejected by default (`MODERATION_FAIL_CLOSED=true`);
+  disabling that is a deliberate availability-over-safety choice.
 - Deployment transport (TLS) is a proxy concern — terminate HTTPS at nginx or
   your cloud load balancer.
 
@@ -67,6 +72,8 @@ JWT_SECRET=<64+ hex chars — generate, never reuse>
 RATELIMIT_ENABLED=true
 FILES_PUBLIC=false
 CORS_ORIGINS=https://your-domain.example
+MODERATION_API_URL=https://your-moderation-service.example/check
+MODERATION_FAIL_CLOSED=true
 ```
 
 - Terminate TLS in front of the stack (the bundled nginx serves plain HTTP on 8080).

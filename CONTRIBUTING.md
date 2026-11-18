@@ -18,27 +18,35 @@
 
 ## Dev setup
 
+The supported entry point is the `Makefile`:
+
 ```bash
-# backend (Python 3.11+)
+make bootstrap          # backend + frontend + pre-commit hooks
+cp .env.example .env
+make dev                # http://127.0.0.1:5173 and :8000/docs
+```
+
+Manual setup is still available:
+
+```bash
 cd backend && python -m venv venv && source venv/bin/activate
 pip install -r requirements-dev.txt
 alembic upgrade head
-uvicorn app.main:app --reload          # http://127.0.0.1:8000/docs
+uvicorn app.main:app --reload
 
-# frontend (Node 20+)
-cd frontend && npm ci && npm run dev   # http://127.0.0.1:5173
-
-# or everything at once
-./scripts/dev.sh start
+cd frontend && npm ci && npm run dev
 ```
+
+See `docs/DEVELOPMENT.md` for the full command reference and local caveats.
 
 ## Before you open a PR — checklist
 
-- [ ] `cd backend && python -m pytest -q` — green, and you added/updated tests
-      for the behavior you changed.
-- [ ] `cd frontend && npm run build` — typecheck + bundle clean.
-- [ ] If you touched the schema: `alembic upgrade head && alembic downgrade
-      base && alembic upgrade head` works.
+- [ ] `make lint` — ruff check green.
+- [ ] `make test` — pytest green with the 80% coverage gate; tests added/updated.
+- [ ] `make typecheck` — strict TypeScript typecheck + bundle clean.
+- [ ] `make security` — pip-audit + bandit clean.
+- [ ] `make docs-build` — MkDocs strict build clean when docs changed.
+- [ ] If you touched the schema: `make alembic-check` passes.
 - [ ] If you touched user-facing strings: both `ar` and `en` entries exist in
       `frontend/src/i18n/dictionary.ts`.
 - [ ] No secrets, no `print`-debugging, no new heavy dependencies.

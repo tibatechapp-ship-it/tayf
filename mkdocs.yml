@@ -1,0 +1,47 @@
+site_name: Tayf Studio Engineering
+site_description: Production-grade Arabic AI video generation — architecture, operations and security.
+site_url: https://tibatechapp-ship-it.github.io/tayf/
+repo_url: https://github.com/tibatechapp-ship-it/tayf
+repo_name: tibatechapp-ship-it/tayf
+docs_dir: docs
+site_dir: site
+theme:
+  name: material
+  language: ar
+  direction: rtl
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - content.code.copy
+    - search.highlight
+  palette:
+    - scheme: slate
+      primary: indigo
+      accent: cyan
+
+nav:
+  - Home: index.md
+  - Development: DEVELOPMENT.md
+  - Architecture: ARCHITECTURE.md
+  - Operations: RUNBOOK.md
+  - Security: THREAT_MODEL.md
+  - AI providers: AI_PROVIDERS.md
+  - Data model: DATA_MODEL.md
+  - Engineering review: ENGINEERING_REVIEW.md
+  - Phase 0 audit: AUDIT_PHASE_0.md
+  - ADRs:
+      - 0001 Current architecture: ADR/0001-current-architecture.md
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - tables
+  - fenced_code
+  - attr_list
+  - pymdownx.details
+  - pymdownx.superfences
+
+plugins:
+  - search

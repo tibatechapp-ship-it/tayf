@@ -6,3 +6,4 @@ websocket-client>=1.7
 ruff
 pip-audit>=2.7
 bandit>=1.7
+pre-commit>=4.0,<5.0

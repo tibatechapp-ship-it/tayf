@@ -81,14 +81,17 @@ cp .env.example .env            # اختياري؛ الإعدادات الافت
 ## التحقق (ما يستشهد به المتتبع)
 
 ```bash
-cd backend && python -m pytest -q            # 128 passed
-cd frontend && npm run build                 # typecheck + bundle
+make bootstrap                               # backend + frontend + pre-commit
+make test                                    # 197 passed, coverage >= 80%
+make typecheck                               # typecheck + bundle
+make security                                # pip-audit + bandit
+make docs-build                              # MkDocs strict build
 ./scripts/run_e2e.sh                         # دورة متصفح كاملة → RESULT: PASS
-cd backend && ruff check .                   # lint نظيف
-
-# إثبات المخطط
-cd backend && alembic upgrade head && alembic downgrade base && alembic upgrade head
+make alembic-check                           # upgrade → downgrade → upgrade
 ```
+
+الوثائق الهندسية الكاملة: `docs/index.md` (Architecture, Development,
+Runbook, Threat model).
 
 ## واجهة API
 

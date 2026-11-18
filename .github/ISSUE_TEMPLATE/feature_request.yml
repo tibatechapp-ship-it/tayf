@@ -1,0 +1,39 @@
+name: Feature request
+description: Propose a product or engineering improvement
+title: "feat: "
+labels: [enhancement, needs-triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or engineering problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence / success criteria
+      description: How will we prove this worked? Which tests or metrics move?
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: Keeps Termux/low-resource support
+        - label: Adds no new heavy dependency
+        - label: Updates docs and TASK_TRACKER.md

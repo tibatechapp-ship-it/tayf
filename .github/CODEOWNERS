@@ -1,0 +1,12 @@
+# CODEOWNERS — every change has a named reviewer.
+# The repository owner is the default reviewer for everything; scope-specific
+# entries make ownership explicit as the team grows.
+
+* @tibatechapp-ship-it
+
+/backend/ @tibatechapp-ship-it
+/frontend/ @tibatechapp-ship-it
+/ai-gateway/ @tibatechapp-ship-it
+/docs/ @tibatechapp-ship-it
+/.github/ @tibatechapp-ship-it
+/security @tibatechapp-ship-it

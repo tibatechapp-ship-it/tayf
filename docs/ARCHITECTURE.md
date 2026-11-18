@@ -1,86 +1,98 @@
-# Architecture — Tayf Studio (unified build, v0.4)
+# Architecture — Tayf Studio
 
-Status: **implemented and tested.** The components below exist in the repo and
-are covered by the backend suite (95 tests) and the browser E2E. The planned
-next stage (dedicated workers, WebSocket progress, payments) is marked as such.
+Status: **current as of 2026-11-18**. This document describes shipped
+behavior, verified by CI run `44281037955` (197 passed, 82.57% coverage).
 
-## 1. Component map (as running today)
+## 1. Component map
 
 ```
-┌──────────────┐   same-origin /api    ┌──────────────────────────────┐
-│  Browser     │ ────────────────────▶ │ Vite dev server / reverse    │
-│  React 19+TS │ ◀──────────────────── │ proxy (TLS in production)    │
-└──────────────┘                       └───────┬──────────────────────┘
-                                               │ /api
-                                     ┌─────────▼─────────┐
-                                     │ FastAPI (app)     │  api → services → repositories
-                                     │ JWT auth, CORS    │
-                                     └──┬──────┬──────┬──┘
-              background tasks (async) │      │      │
-                  ┌────────────────────┘      │      └────────────┐
-        ┌─────────▼──────────┐   ┌────────────▼─────────┐  ┌──────▼──────────────┐
-        │ Pipeline runner    │   │ SQLite (dev) /       │  │ Storage backend     │
-        │ storyboard→frames  │   │ PostgreSQL (prod)    │  │ local fs | S3 API   │
-        │ →ffmpeg→storage    │   │ via DATABASE_URL     │  │ + TTL cleanup loop  │
-        └─────────┬──────────┘   └──────────────────────┘  └─────────────────────┘
-                  │
-        ┌─────────▼──────────────┐
-        │ AI provider (pluggable)│   mock (offline, SIMULATED)
-        │ services/ai/base.py    │─── zai_gateway → ai-gateway sidecar :3030
-        └────────────────────────┘   openai_compatible (bring your own key)
+Browser (React 19 + TS, RTL-first)
+  │  same-origin /api
+  ▼
+Vite dev server / nginx
+  │
+  ▼
+FastAPI application
+  ├── api/            HTTP concerns, auth, rate limits, SSE tickets
+  ├── services/       business rules, provider calls, credits, moderation
+  ├── repositories/   the only layer issuing ORM queries
+  └── models/schemas  DB tables vs wire contracts
+        │
+        ├── SQLite (dev/Termux) or PostgreSQL (prod)
+        ├── local filesystem or S3-compatible storage
+        ├── AI providers: mock | zai_gateway | openai_compatible | replicate_t2v
+        ├── Stripe Checkout + signed webhook
+        └── external moderation HTTP service (optional)
 ```
 
-The `ai-gateway` sidecar is a tiny Node process bound to **127.0.0.1 only**
-(never exposed); the backend reaches it over loopback with an optional shared
-token header.
+A durable worker (`python -m app.worker`) claims leased jobs in production
+compose. In development/tests, Starlette `BackgroundTasks` runs the same
+pipeline in-process, which keeps the suite deterministic.
 
-## 2. Layer boundaries (enforced by directory layout)
+## 2. Layer boundaries
 
 | Layer | Location | Rule |
-|---|---|---|
-| HTTP | `backend/app/api/` | validation + status codes only; no SQL, no business rules |
-| Business | `backend/app/services/` | pricing, job lifecycle, refunds, provider calls |
-| Persistence | `backend/app/repositories/` | the only place with queries/ORM; ownership is enforced here |
-| Models/schemas | `models/`, `schemas/` | DB tables vs wire contracts, kept separate |
+| --- | --- | --- |
+| HTTP | `backend/app/api/` | validation, status codes, auth; no SQL, no business rules |
+| Business | `backend/app/services/` | pricing, lifecycle, refunds, provider calls, payments |
+| Persistence | `backend/app/repositories/` | only place with queries/ORM; ownership enforced here |
+| Models/schemas | `backend/app/models/`, `backend/app/schemas/` | tables vs wire contracts, kept separate |
 | Providers | `backend/app/services/ai/` | one adapter per vendor behind one interface |
-| Storage | `backend/app/services/storage/` | `put/get/exists/delete/iter` + TTL cleanup behind one interface |
-| Frontend | `frontend/src/{views,services,i18n,styles}` | components never contain business rules; zero mock data |
+| Storage | `backend/app/services/storage/` | `put/get/exists/delete/iter` plus TTL cleanup |
+| Frontend | `frontend/src/{views,services,i18n,styles}` | no business rules, zero mock data |
 
-## 3. Data flow: a generation request (implemented)
+## 3. Generation lifecycle
 
-1. `POST /projects/{id}/jobs` → JWT → project ownership check.
-2. **Safety pre-filter** screens the prompt; a rejection writes a `rejected`
-   job row and charges nothing.
-3. **One transaction**: insert `pending` job row → `flush()` to get its id →
+1. `POST /projects/{id}/jobs` → JWT authentication → project ownership check.
+2. Local safety screen (length, blocklist, optional external moderator).
+   Rejection writes a `rejected` job row and charges nothing.
+3. One transaction: insert `PENDING` job → `flush()` to obtain its id →
    ledger `job_charge` entry carrying that id → commit.
-4. `202 Accepted` with the job contract; a Starlette background task runs the
-   pipeline after the response is sent (works identically under uvicorn and
-   TestClient, which makes the suite deterministic).
-5. Pipeline (`services/pipeline.py`), committing after every step so polling
-   shows live progress:
-   `processing → storyboard (provider) → safety screen of AI text → keyframes
-   per scene (stored) → ffmpeg MP4 compose (thread) → post-artifact check →
-   `completed` (result_url + thumbnail + storyboard JSON)`.
-6. Any failure ⇒ `failed` + **full refund** ledger entry. The mock provider is
-   the only one allowed to set `simulated=true`.
-7. Storage artifacts live under `jobs/<job_id>/…` with a TTL cleanup loop
-   (`STORAGE_TTL_DAYS`, default 7) running inside the app lifespan.
+4. `202 Accepted` with the job contract. The pipeline then runs in the worker
+   or as a background task.
+5. Pipeline checkpoints persist `progress` and `stage` at 10/30/40/70/85:
+   storyboard → AI-text safety screen → keyframes or native T2V → thumbnail →
+   artifact storage → `completed`.
+6. SSE endpoint streams `progress`/`done` events using a 5-minute HMAC ticket;
+   the frontend falls back to 4-second polling.
+7. Any failure emits a full refund ledger entry with a unique operation key.
 
-## 4. Concurrency model (and its honest limits)
+## 4. Concurrency and recovery
 
-- Background tasks run on uvicorn's event loop; CPU-bound ffmpeg work is moved
-  to threads (`asyncio.to_thread`), provider I/O is async httpx.
-- SQLite WAL keeps reads flowing while a job writes; `PRAGMA foreign_keys=ON`
-  is set on every connection (CASCADE delete actually cascades).
-- **Limit:** one process, in-process queue. The moment the owner outgrows a
-  single box, the pipeline call site (`background_tasks.add_task(...)`) is the
-  only thing to swap for a real worker/queue — everything else stays.
+- `generation_jobs` is the queue: `worker_id`, `lease_until`, `attempts`.
+- Workers renew leases at `JOB_LEASE_SECONDS/3`.
+- Expired leases are reclaimed by another worker; the API can restart without
+  losing work when `EXTERNAL_JOB_WORKER=true`.
+- SQLite uses WAL and `PRAGMA foreign_keys=ON`.
+- CPU-bound ffmpeg work runs in a thread; provider I/O uses `httpx`.
 
-## 5. Next stages (planned, not built — no pretending)
+## 5. Credit and payment integrity
 
-- WebSocket/SSE live progress instead of 4 s polling.
-- Dedicated worker process + queue for multi-machine scale.
-- A real **video** provider (text-to-video model) behind the same interface —
-  today's real output is storyboard + keyframes + composed MP4.
-- Payments (top-up packages) on top of the existing ledger.
-- Rate limiting + moderation API integration alongside the local term list.
+- `credit_ledger` is append-only; balance is the sum of deltas.
+- Every movement has an `operation_key` unique constraint.
+- Job charges use `job_charge:<job_id>`.
+- Stripe top-ups use `stripe:<sha256(session_id)>`.
+- Credits are granted only after a paid webhook whose amount, currency and
+  package match the server-owned package definition.
+
+## 6. Safety and moderation
+
+- Local blocklist runs first, so known-bad prompts never leave the process.
+- When `MODERATION_API_URL` is set, the external moderator sees normalized
+  prompt text and AI-produced storyboard text.
+- Transport errors, timeouts, non-2xx responses and malformed verdicts reject
+  with `moderation_unavailable` unless `MODERATION_FAIL_CLOSED=false`.
+
+## 7. Honesty and observability
+
+- `mock` provider output is stamped `SIMULATED` and `simulated=true`.
+- `replicate_t2v` stores the vendor MP4/WebM directly; no keyframes are faked.
+- `/metrics` exposes aggregate counters only.
+- Every response carries security headers and an `X-Request-ID`.
+
+## 8. Known limits
+
+- The in-process rate limiter is per replica; use an edge limiter for multi-replica deployments.
+- SQLite remains a portable default, not a high-concurrency production database.
+- Replicate/Payments providers require operator-owned keys and webhook secrets.
+- GitHub Actions are not yet SHA-pinned; tracked as release-hardening debt.

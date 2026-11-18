@@ -1,0 +1,54 @@
+name: Bug report
+description: Report incorrect behavior with reproducible evidence
+title: "fix: "
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Tayf takes "no fabricated success" seriously —
+        include commands and outputs, not just a description.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Clear description of the actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. `make dev`
+        2. Create a job with prompt ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Command output, logs, screenshots, job IDs. Never paste secrets.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: "0.6.0 / 8c227cc"
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options: [local-dev, docker-compose, CI, production, termux]
+    validations:
+      required: true

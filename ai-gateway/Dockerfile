@@ -1,5 +1,5 @@
 # Tayf Studio AI gateway — minimal Node sidecar (LLM + image model proxy).
-FROM node:20-alpine
+FROM node:26-alpine
 WORKDIR /app
 COPY package.json ./
 COPY index.mjs ./

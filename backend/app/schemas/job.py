@@ -1,7 +1,7 @@
 """Generation job schemas."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -17,6 +17,7 @@ class JobCreateIn(BaseModel):
     num_scenes: int = Field(default=4, ge=2, le=8)
     aspect: str = Field(default="16:9")
     style: str = Field(default="cinematic", max_length=40)
+    require_approvals: bool = False
 
     model_config = ConfigDict(extra="forbid")
 
@@ -24,8 +25,16 @@ class JobCreateIn(BaseModel):
 class SceneOut(BaseModel):
     index: int
     description: str
+    image_prompt: str = ""
     image_url: str | None = None
     duration_seconds: float
+
+
+class ApprovalDecisionIn(BaseModel):
+    decision: Literal["approve", "reject"]
+    note: str | None = Field(default=None, max_length=1000)
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class JobOut(BaseModel):
@@ -51,6 +60,9 @@ class JobOut(BaseModel):
     video_size_bytes: int | None = None
     duration_seconds: float | None = None
     credits_charged: int
+    require_approvals: bool = False
+    pending_approval: dict[str, Any] | None = None
+    approval_history: list[dict[str, Any]] | None = None
     created_at: datetime
     completed_at: datetime | None = None
     scenes: list[SceneOut] = Field(default_factory=list)
@@ -61,6 +73,19 @@ class JobOut(BaseModel):
         data.provider = job.provider_name
         data.output_url = sign_file_url(job.result_url)
         data.thumbnail_url = sign_file_url(job.thumbnail_url)
+        data.approval_history = job.approval_history or []
+        gate = job.pending_approval
+        data.pending_approval = (
+            {
+                "stage": gate.get("stage"),
+                "review": gate.get("review"),
+                "requested_at": gate.get("requested_at"),
+                "decision": gate.get("decision"),
+                "note": gate.get("note"),
+            }
+            if isinstance(gate, dict)
+            else None
+        )
         storyboard = _storyboard_dict(job)
         if storyboard:
             scenes: list[SceneOut] = []
@@ -75,6 +100,7 @@ class JobOut(BaseModel):
                     SceneOut(
                         index=index,
                         description=str(raw.get("description") or ""),
+                        image_prompt=str(raw.get("image_prompt") or ""),
                         image_url=sign_file_url(raw.get("image_url")),
                         duration_seconds=float(raw.get("duration_seconds") or 4.0),
                     )
@@ -123,6 +149,7 @@ class JobProgressEvent(BaseModel):
     rejection_reason: str | None = None
     output_url: str | None = None
     thumbnail_url: str | None = None
+    approval_stage: str | None = None
     completed_at: datetime | None = None
 
     @classmethod
@@ -136,6 +163,9 @@ class JobProgressEvent(BaseModel):
             rejection_reason=job.rejection_reason,
             output_url=sign_file_url(job.result_url),
             thumbnail_url=sign_file_url(job.thumbnail_url),
+            approval_stage=(job.pending_approval or {}).get("stage")
+            if isinstance(job.pending_approval, dict)
+            else None,
             completed_at=job.completed_at,
         )
 

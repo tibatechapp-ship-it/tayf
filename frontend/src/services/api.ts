@@ -185,9 +185,25 @@ export interface Job {
   video_size_bytes: number | null;
   duration_seconds: number | null;
   credits_charged: number;
+  require_approvals: boolean;
+  pending_approval: ApprovalGate | null;
+  approval_history: ApprovalDecision[];
   created_at: string;
   completed_at: string | null;
   scenes: Scene[];
+}
+
+export interface ApprovalGate {
+  stage: string;
+  review: Record<string, unknown>;
+  requested_at: string;
+  decision: string | null;
+  note: string | null;
+}
+
+export interface ApprovalDecision extends ApprovalGate {
+  decided_at: string;
+  decided_by: string;
 }
 
 export interface StreamTicket {
@@ -206,6 +222,7 @@ export interface JobProgressEvent {
   rejection_reason: string | null;
   output_url: string | null;
   thumbnail_url: string | null;
+  approval_stage: string | null;
   completed_at: string | null;
 }
 
@@ -350,7 +367,13 @@ export function archiveProject(token: string, projectId: string): Promise<void> 
 export function createJob(
   token: string,
   projectId: string,
-  payload: { prompt: string; num_scenes: number; aspect: string; style: string },
+  payload: {
+    prompt: string;
+    num_scenes: number;
+    aspect: string;
+    style: string;
+    require_approvals?: boolean;
+  },
 ): Promise<Job> {
   return request<Job>(`/projects/${projectId}/jobs`, {
     method: "POST",
@@ -365,6 +388,19 @@ export function listJobs(token: string, projectId: string): Promise<Job[]> {
 
 export function fetchJob(token: string, jobId: string): Promise<Job> {
   return request<Job>(`/jobs/${jobId}`, { token });
+}
+
+export function decideJobApproval(
+  token: string,
+  jobId: string,
+  decision: "approve" | "reject",
+  note?: string,
+): Promise<Job> {
+  return request<Job>(`/jobs/${jobId}/approval`, {
+    method: "POST",
+    body: { decision, note: note || undefined },
+    token,
+  });
 }
 
 export function fetchJobProof(token: string, jobId: string): Promise<JobProof> {

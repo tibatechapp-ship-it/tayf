@@ -7,6 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 ## [Unreleased]
 
 ### Added
+- Optional human approval gates: jobs created with `require_approvals=true` pause after the storyboard (text/prompt review) and after assets (image or native-video preview). `POST /api/v1/jobs/{id}/approval` approves or rejects; approval resumes from stored bytes without re-calling the provider, rejection refunds through the normal cancel path. Decisions are recorded in `approval_history` and in the proof chain. AR/EN studio review panel and migration `a1b2c3d4e5f6`.
 - Verifiable per-stage proof: an append-only, hash-chained trail of inputs, provider/model version, runtime, cost and per-stage verification verdicts. `GET /api/v1/jobs/{id}/proof` returns the canonical document, a public SHA-256 hash and an HMAC authenticity tag; the studio shows an AR/EN proof panel with chain integrity. Migration `f6a8c3e2b4d7`.
 - Live job progress over Server-Sent Events: short-lived signed stream tickets, `GET /api/v1/jobs/{id}/events`, persisted `progress`/`stage` fields, and an AR/EN progress bar in the studio (PR #9, merged `aee89ae`).
 - `JobProgressEvent` wire schema and migration `e5a9c7b1d3f4` for existing databases.

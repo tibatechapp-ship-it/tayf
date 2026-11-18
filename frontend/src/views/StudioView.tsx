@@ -4,6 +4,7 @@ import {
   archiveProject,
   cancelJob,
   createJob,
+  decideJobApproval,
   createProject,
   createTopUpCheckout,
   fetchCredits,
@@ -15,6 +16,7 @@ import {
   listJobs,
   listProjects,
   subscribeJobEvents,
+  type ApprovalGate,
   type Job,
   type JobProof,
   type JobProgressEvent,
@@ -61,6 +63,7 @@ export default function StudioView({
   const [aspect, setAspect] = useState<string>("16:9");
   const [style, setStyle] = useState<string>("cinematic");
   const [creatingJob, setCreatingJob] = useState(false);
+  const [requireApprovals, setRequireApprovals] = useState(false);
   const [jobError, setJobError] = useState<string | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[] | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -69,6 +72,10 @@ export default function StudioView({
   const [showTopUp, setShowTopUp] = useState(false);
   const [topUpBusy, setTopUpBusy] = useState(false);
   const [topUpError, setTopUpError] = useState<string | null>(null);
+
+  const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
+  const [approvalNotes, setApprovalNotes] = useState<Record<string, string>>({});
+  const [approvalError, setApprovalError] = useState<string | null>(null);
 
   const [proofOpenId, setProofOpenId] = useState<string | null>(null);
   const [proofs, setProofs] = useState<Record<string, JobProof>>({});
@@ -266,6 +273,7 @@ export default function StudioView({
         num_scenes: numScenes,
         aspect,
         style,
+        require_approvals: requireApprovals,
       });
       setPrompt("");
       onBalanceChange(balance - numScenes);
@@ -292,6 +300,21 @@ export default function StudioView({
       setLoadError(err instanceof Error ? err.message : String(err));
     } finally {
       setCancellingId(null);
+    }
+  }
+
+  async function handleApproval(jobId: string, decision: "approve" | "reject") {
+    if (approvalBusyId) return;
+    setApprovalBusyId(jobId);
+    setApprovalError(null);
+    try {
+      await decideJobApproval(token, jobId, decision, approvalNotes[jobId]);
+      await refreshJobs();
+      void refreshLedger();
+    } catch (err) {
+      setApprovalError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setApprovalBusyId(null);
     }
   }
 
@@ -366,6 +389,45 @@ export default function StudioView({
       store: t.stageStoring,
     };
     return extra[stage] ?? stageLabel(stage);
+  }
+
+  function ApprovalReview({ gate }: { gate: ApprovalGate }) {
+    const rawScenes = Array.isArray(gate.review.scenes) ? gate.review.scenes : [];
+    const scenes = rawScenes as Array<{
+      index?: unknown;
+      description?: unknown;
+      image_prompt?: unknown;
+      image_url?: unknown;
+    }>;
+    const videoUrl =
+      typeof gate.review.video_url === "string" ? (gate.review.video_url as string) : null;
+    const thumbUrl =
+      typeof gate.review.thumbnail_url === "string" ? (gate.review.thumbnail_url as string) : null;
+    return (
+      <>
+        <p className="hint">
+          {gate.stage === "storyboard" ? t.approvalStoryboard : t.approvalAssets}
+        </p>
+        {thumbUrl && <img className="approval-thumb" src={thumbUrl} alt="review" loading="lazy" />}
+        {videoUrl && <video className="approval-video" controls preload="metadata" src={videoUrl} />}
+        <ol className="approval-scenes">
+          {scenes.map((scene, index) => {
+            const imageUrl = typeof scene.image_url === "string" ? scene.image_url : null;
+            return (
+              <li key={typeof scene.index === "number" ? scene.index : index}>
+                {imageUrl && <img src={imageUrl} alt={`scene ${String(scene.index ?? index)}`} loading="lazy" />}
+                {typeof scene.description === "string" && <p>{scene.description}</p>}
+                {typeof scene.image_prompt === "string" && (
+                  <p className="hint" dir="ltr">
+                    {scene.image_prompt}
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      </>
+    );
   }
 
   const selected = projects.find((p) => p.id === selectedId) ?? null;
@@ -561,6 +623,16 @@ export default function StudioView({
                   </span>
                 </div>
 
+                <label className="approval-check">
+                  <input
+                    type="checkbox"
+                    checked={requireApprovals}
+                    onChange={(e) => setRequireApprovals(e.target.checked)}
+                    data-testid="require-approvals"
+                  />
+                  <span>{t.requireApprovals}</span>
+                </label>
+
                 {jobError && (
                   <p className="panel panel-error" role="alert">
                     {jobError}
@@ -678,6 +750,45 @@ export default function StudioView({
                           ))}
                         </ol>
                       </div>
+                    )}
+
+                    {job.pending_approval && job.pending_approval.decision === null && (
+                      <section className="approval-panel" data-testid={`approval-${job.id}`}>
+                        <h4>{t.approvalTitle}</h4>
+                        <ApprovalReview gate={job.pending_approval} />
+                        <label className="field">
+                          <span>{t.approvalNote}</span>
+                          <input
+                            type="text"
+                            maxLength={1000}
+                            value={approvalNotes[job.id] ?? ""}
+                            onChange={(e) =>
+                              setApprovalNotes((current) => ({ ...current, [job.id]: e.target.value }))
+                            }
+                          />
+                        </label>
+                        {approvalError && <p className="panel panel-error">{approvalError}</p>}
+                        <div className="approval-actions">
+                          <button
+                            type="button"
+                            className="primary"
+                            disabled={approvalBusyId !== null}
+                            onClick={() => void handleApproval(job.id, "approve")}
+                            data-testid={`approve-${job.id}`}
+                          >
+                            {approvalBusyId === job.id ? t.approvalBusy : t.approvalApprove}
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost danger"
+                            disabled={approvalBusyId !== null}
+                            onClick={() => void handleApproval(job.id, "reject")}
+                            data-testid={`reject-${job.id}`}
+                          >
+                            {t.approvalReject}
+                          </button>
+                        </div>
+                      </section>
                     )}
 
                     {proofOpenId === job.id && (

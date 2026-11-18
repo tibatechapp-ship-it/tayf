@@ -45,7 +45,11 @@ def start(db: Session, job_id: UUID) -> GenerationJob | None:
     result = db.execute(
         update(GenerationJob)
         .where(GenerationJob.id == job_id, GenerationJob.status == GenerationStatus.PENDING)
-        .values(status=GenerationStatus.PROCESSING)
+        .values(
+            status=GenerationStatus.PROCESSING,
+            progress=5,
+            stage="processing",
+        )
     )
     if result.rowcount != 1:
         return None
@@ -63,7 +67,12 @@ def cancel(db: Session, job_id: UUID, owner_id: UUID) -> tuple[GenerationJob | N
             GenerationJob.status.in_(ACTIVE_STATUSES),
             _owner_exists(owner_id),
         )
-        .values(status=GenerationStatus.CANCELLED, completed_at=_now())
+        .values(
+            status=GenerationStatus.CANCELLED,
+            completed_at=_now(),
+            progress=100,
+            stage="cancelled",
+        )
     )
     if result.rowcount != 1:
         job = db.get(GenerationJob, job_id)
@@ -102,6 +111,8 @@ def fail(
             error_message=message[:1000],
             safety_category=category,
             completed_at=_now(),
+            progress=100,
+            stage="failed",
         )
     )
     if result.rowcount != 1:
@@ -143,6 +154,8 @@ def complete(
         )
         .values(
             status=GenerationStatus.COMPLETED,
+            progress=100,
+            stage="completed",
             result_url=result_url,
             thumbnail_url=thumbnail_url,
             video_size_bytes=video_size_bytes,

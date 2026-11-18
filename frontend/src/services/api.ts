@@ -178,6 +178,8 @@ export interface Job {
   error_message: string | null;
   rejection_reason: string | null;
   safety_category: string | null;
+  progress: number;
+  stage: string;
   output_url: string | null;
   thumbnail_url: string | null;
   video_size_bytes: number | null;
@@ -186,6 +188,25 @@ export interface Job {
   created_at: string;
   completed_at: string | null;
   scenes: Scene[];
+}
+
+export interface StreamTicket {
+  job_id: string;
+  ticket: string;
+  expires_at: string;
+  expires_in: number;
+}
+
+export interface JobProgressEvent {
+  job_id: string;
+  status: JobStatus;
+  progress: number;
+  stage: string;
+  error_message: string | null;
+  rejection_reason: string | null;
+  output_url: string | null;
+  thumbnail_url: string | null;
+  completed_at: string | null;
 }
 
 export interface LedgerEntry {
@@ -291,6 +312,38 @@ export function fetchJob(token: string, jobId: string): Promise<Job> {
 
 export function cancelJob(token: string, jobId: string): Promise<Job> {
   return request<Job>(`/jobs/${jobId}/cancel`, { method: "POST", token });
+}
+
+export function fetchStreamTicket(token: string, jobId: string): Promise<StreamTicket> {
+  return request<StreamTicket>(`/jobs/${jobId}/stream-ticket`, { method: "POST", token });
+}
+
+/**
+ * Native EventSource cannot send the Bearer header, so the caller first gets a
+ * short-lived signed ticket and passes it in the query string instead.
+ */
+export function subscribeJobEvents(
+  jobId: string,
+  ticket: string,
+  onEvent: (event: JobProgressEvent) => void,
+  onError?: (error: Error) => void,
+): () => void {
+  const query = encodeURIComponent(ticket);
+  const source = new EventSource(`${API}/jobs/${jobId}/events?ticket=${query}`);
+  source.addEventListener("progress", (message) => {
+    try {
+      const payload = JSON.parse((message as MessageEvent<string>).data) as JobProgressEvent;
+      onEvent(payload);
+    } catch {
+      onError?.(new Error("بيانات البث غير صالحة"));
+    }
+  });
+  source.addEventListener("done", () => source.close());
+  source.onerror = () => {
+    source.close();
+    onError?.(new Error("انقطع بث التقدم - سيستمر التحديث الدوري"));
+  };
+  return () => source.close();
 }
 
 export function refreshSession(): Promise<TokenResponse> {

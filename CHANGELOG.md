@@ -4,6 +4,15 @@ All notable changes to **Tayf Studio** are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 `0.x` while the product is pre-1.0.
 
+## [Unreleased]
+
+### Added
+- Live job progress over Server-Sent Events: short-lived signed stream tickets, `GET /api/v1/jobs/{id}/events`, persisted `progress`/`stage` fields, and an AR/EN progress bar in the studio (PR #9, in review).
+- `JobProgressEvent` wire schema and migration `e5a9c7b1d3f4` for existing databases.
+
+### Security
+- SSE uses a 5-minute HMAC capability ticket bound to one user and one job; native `EventSource` never needs the Bearer token in the URL.
+
 ## [0.6.0] — 2026-11-18
 
 ### Added

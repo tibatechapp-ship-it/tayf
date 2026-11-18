@@ -44,6 +44,8 @@ class JobOut(BaseModel):
     error_message: str | None = None
     rejection_reason: str | None = None
     safety_category: str | None = None
+    progress: int = Field(default=0, ge=0, le=100)
+    stage: str = "queued"
     output_url: str | None = None
     thumbnail_url: str | None = None
     video_size_bytes: int | None = None
@@ -99,3 +101,40 @@ def _storyboard_dict(job) -> dict[str, Any] | None:  # noqa: ANN001
 
 class JobListOut(BaseModel):
     jobs: list[JobOut]
+
+
+class StreamTicketOut(BaseModel):
+    """Short-lived capability for native EventSource (cannot send Bearer headers)."""
+
+    job_id: UUID
+    ticket: str
+    expires_at: datetime
+    expires_in: int
+
+
+class JobProgressEvent(BaseModel):
+    """One SSE progress frame. Mirrors JobOut fields needed for a live UI."""
+
+    job_id: UUID
+    status: GenerationStatus
+    progress: int = Field(ge=0, le=100)
+    stage: str
+    error_message: str | None = None
+    rejection_reason: str | None = None
+    output_url: str | None = None
+    thumbnail_url: str | None = None
+    completed_at: datetime | None = None
+
+    @classmethod
+    def from_model(cls, job) -> "JobProgressEvent":  # noqa: ANN001
+        return cls(
+            job_id=job.id,
+            status=job.status,
+            progress=job.progress,
+            stage=job.stage,
+            error_message=job.error_message,
+            rejection_reason=job.rejection_reason,
+            output_url=sign_file_url(job.result_url),
+            thumbnail_url=sign_file_url(job.thumbnail_url),
+            completed_at=job.completed_at,
+        )

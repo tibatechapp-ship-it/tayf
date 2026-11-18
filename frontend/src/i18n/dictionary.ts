@@ -64,6 +64,18 @@ export interface Copy {
   durationSeconds: string;
   selectProjectHint: string;
   insufficient: string;
+  progressLabel: string;
+  stageQueued: string;
+  stageProcessing: string;
+  stageStoryboard: string;
+  stageSafety: string;
+  stageKeyframes: string;
+  stageComposing: string;
+  stageStoring: string;
+  stageCompleted: string;
+  stageFailed: string;
+  stageRejected: string;
+  stageCancelled: string;
 
   // ledger + cancellation
   ledgerTitle: string;
@@ -152,6 +164,18 @@ export const copy: Record<Lang, Copy> = {
     durationSeconds: "ث",
     selectProjectHint: "اختر مشروعًا من القائمة لعرض مهامه وإنشاء مهمة جديدة.",
     insufficient: "الرصيد غير كافٍ — كل مشهد يكلف رصيدًا واحدًا",
+    progressLabel: "التقدم",
+    stageQueued: "في الانتظار",
+    stageProcessing: "قيد التنفيذ",
+    stageStoryboard: "اللوحة القصصية",
+    stageSafety: "فحص المحتوى",
+    stageKeyframes: "الإطارات المفتاحية",
+    stageComposing: "تجميع الفيديو",
+    stageStoring: "حفظ النتائج",
+    stageCompleted: "مكتملة",
+    stageFailed: "فاشلة",
+    stageRejected: "مرفوضة",
+    stageCancelled: "ملغاة",
 
     ledgerTitle: "دفتر الرصيد",
     ledgerEmpty: "لا حركات بعد.",
@@ -238,6 +262,18 @@ export const copy: Record<Lang, Copy> = {
     durationSeconds: "s",
     selectProjectHint: "Pick a project from the list to view its jobs and create a new one.",
     insufficient: "Insufficient balance — each scene costs 1 credit",
+    progressLabel: "Progress",
+    stageQueued: "Queued",
+    stageProcessing: "Starting",
+    stageStoryboard: "Storyboard",
+    stageSafety: "Safety check",
+    stageKeyframes: "Keyframes",
+    stageComposing: "Composing video",
+    stageStoring: "Saving results",
+    stageCompleted: "Completed",
+    stageFailed: "Failed",
+    stageRejected: "Rejected",
+    stageCancelled: "Cancelled",
 
     ledgerTitle: "Credit ledger",
     ledgerEmpty: "No movements yet.",

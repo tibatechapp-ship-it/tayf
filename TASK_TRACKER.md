@@ -22,7 +22,7 @@
 | T-13 | 4 | **Real AI generation** via zai_gateway | TESTED | `simulated=false` artifacts: real storyboard + JPEG keyframes + MP4 | 2026-10-31: MP4 2.59MB/10.5s from LLM storyboard + 2 real keyframes (wall ≈126s) |
 | T-14 | 4 | ai-gateway sidecar (localhost-only) | TESTED | `/health` + real `/v1/chat`; token optional on loopback, REQUIRED on non-loopback binds | `GATEWAY-OK` round-trip verified |
 | T-15 | 4 | CI restored (trigger bug fix) | TESTED | `on.push.branches=[main]` valid; ffmpeg installed for compose tests | was `branches: ain]` → CI never ran on main |
-| T-16 | 5 | WebSocket/SSE live progress | NOT_STARTED | UI updates without polling | replaces 4s poll |
+| T-16 | 5 | WebSocket/SSE live progress | IMPLEMENTED | UI updates without polling | SSE ticket + `/events`; 4s poll kept as fallback (PR #9, in review) |
 | T-17 | 5 | Dedicated worker + queue | PARTIALLY_FIXED | leased queue + recovery shipped; remaining P0 audit items tracked below | PR #6 merged `602eca16` |
 | T-18 | 5 | Real video provider (text-to-video) | NOT_STARTED | same interface, `simulated=false` MP4 from vendor model | behind `services/ai/base.py` |
 | T-19 | 5 | Payments/top-ups on the ledger | NOT_STARTED | purchase → `grant` with receipt reason | ledger already audit-ready |

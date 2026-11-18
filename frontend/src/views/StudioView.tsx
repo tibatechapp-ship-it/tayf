@@ -7,10 +7,13 @@ import {
   createProject,
   fetchCredits,
   fetchJob,
+  fetchStreamTicket,
   getToken,
   listJobs,
   listProjects,
+  subscribeJobEvents,
   type Job,
+  type JobProgressEvent,
   type LedgerEntry,
   type Project,
 } from "../services/api";
@@ -59,6 +62,8 @@ export default function StudioView({
 
   const token = getToken() ?? "";
   const pollTimer = useRef<number | null>(null);
+  const streamClosers = useRef<Map<string, () => void>>(new Map());
+  const pendingTickets = useRef<Set<string>>(new Set());
 
   const refreshProjects = useCallback(
     async (keepSelection: boolean) => {
@@ -101,6 +106,69 @@ export default function StudioView({
     }
   }, [token]);
 
+  const closeStream = useCallback((jobId: string) => {
+    streamClosers.current.get(jobId)?.();
+    streamClosers.current.delete(jobId);
+  }, []);
+
+  const applyProgress = useCallback(
+    (event: JobProgressEvent) => {
+      setJobs((current) =>
+        current.map((job) =>
+          job.id === event.job_id
+            ? {
+                ...job,
+                status: event.status,
+                progress: event.progress,
+                stage: event.stage,
+                error_message: event.error_message,
+                rejection_reason: event.rejection_reason,
+                output_url: event.output_url,
+                thumbnail_url: event.thumbnail_url,
+                completed_at: event.completed_at,
+              }
+            : job,
+        ),
+      );
+      if (!ACTIVE_STATUSES.has(event.status)) {
+        closeStream(event.job_id);
+        void refreshJobs();
+        void refreshLedger();
+      }
+    },
+    [closeStream, refreshJobs, refreshLedger],
+  );
+
+  const syncStreams = useCallback(
+    (activeJobs: Job[]) => {
+      const wanted = new Set(activeJobs.map((job) => job.id));
+      for (const [jobId, close] of streamClosers.current) {
+        if (!wanted.has(jobId)) {
+          close();
+          streamClosers.current.delete(jobId);
+        }
+      }
+      for (const job of activeJobs) {
+        if (streamClosers.current.has(job.id) || pendingTickets.current.has(job.id)) continue;
+        pendingTickets.current.add(job.id);
+        void fetchStreamTicket(token, job.id)
+          .then(({ ticket }) => {
+            const close = subscribeJobEvents(job.id, ticket, applyProgress, () =>
+              closeStream(job.id),
+            );
+            streamClosers.current.set(job.id, close);
+          })
+          .catch(() => {
+            /* the 4s poll is the fallback when tickets cannot be minted */
+          })
+          .finally(() => {
+            pendingTickets.current.delete(job.id);
+          });
+      }
+    },
+    [token, applyProgress, closeStream],
+  );
+
   useEffect(() => {
     void refreshProjects(false);
     void refreshLedger();
@@ -109,6 +177,7 @@ export default function StudioView({
   useEffect(() => {
     if (!selectedId) {
       setJobs([]);
+      for (const jobId of [...streamClosers.current.keys()]) closeStream(jobId);
       return;
     }
     void refreshJobs();
@@ -118,8 +187,13 @@ export default function StudioView({
     }, POLL_MS);
     return () => {
       if (pollTimer.current) window.clearInterval(pollTimer.current);
+      for (const jobId of [...streamClosers.current.keys()]) closeStream(jobId);
     };
-  }, [selectedId, refreshJobs]);
+  }, [selectedId, refreshJobs, closeStream]);
+
+  useEffect(() => {
+    syncStreams(jobs.filter((job) => ACTIVE_STATUSES.has(job.status)));
+  }, [jobs, syncStreams]);
 
   async function handleCreateProject(event: React.FormEvent) {
     event.preventDefault();
@@ -198,6 +272,23 @@ export default function StudioView({
       refund_job_cancelled: t.ledgerRefundCancelled,
     };
     return map[reason] ?? `${t.ledgerOther} (${reason})`;
+  }
+
+  function stageLabel(stage: string): string {
+    const map: Record<string, string> = {
+      queued: t.stageQueued,
+      processing: t.stageProcessing,
+      storyboard: t.stageStoryboard,
+      safety: t.stageSafety,
+      keyframes: t.stageKeyframes,
+      composing: t.stageComposing,
+      storing: t.stageStoring,
+      completed: t.stageCompleted,
+      failed: t.stageFailed,
+      rejected: t.stageRejected,
+      cancelled: t.stageCancelled,
+    };
+    return map[stage] ?? stage;
   }
 
   const selected = projects.find((p) => p.id === selectedId) ?? null;
@@ -422,6 +513,24 @@ export default function StudioView({
                         </button>
                       )}
                     </div>
+
+                    {ACTIVE_STATUSES.has(job.status) && (
+                      <div
+                        className="job-progress"
+                        role="progressbar"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={job.progress}
+                        data-testid={`progress-${job.id}`}
+                      >
+                        <div className="job-progress-track">
+                          <div className="job-progress-fill" style={{ width: `${job.progress}%` }} />
+                        </div>
+                        <span className="job-progress-label" dir="ltr">
+                          {t.progressLabel}: {job.progress}% · {stageLabel(job.stage)}
+                        </span>
+                      </div>
+                    )}
 
                     <p className="job-prompt">{job.prompt}</p>
 

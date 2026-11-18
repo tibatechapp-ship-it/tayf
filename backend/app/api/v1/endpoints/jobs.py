@@ -8,21 +8,25 @@ to claim, so an API restart cannot lose it.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import get_current_user
 from app.core.config import get_settings
 from app.core.metrics import record_job_terminal
 from app.core.ratelimit import job_rate_limit
 from app.core.safety import get_safety_layer
+from app.core.stream_tickets import issue_stream_ticket, verify_stream_ticket
 from app.db.session import get_session
 from app.models import GenerationJob, GenerationStatus, Project, User
 from app.repositories import job_repository
-from app.schemas.job import JobCreateIn, JobOut
+from app.schemas.job import JobCreateIn, JobOut, JobProgressEvent, StreamTicketOut
 from app.services import credits, job_state
 from app.services.pipeline import run_job_pipeline
 
@@ -30,6 +34,12 @@ router = APIRouter(tags=["jobs"])
 
 SessionDep = Annotated[Session, Depends(get_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+STREAM_TICKET_TTL_SECONDS = 300
+STREAM_MAX_SECONDS = 900
+STREAM_POLL_SECONDS = 1.0
+STREAM_HEARTBEAT_SECONDS = 15.0
+TERMINAL_STATUSES = frozenset(item.value for item in GenerationStatus.terminal())
 
 
 def _get_owned_project(session: Session, project_id: uuid.UUID, owner_id: uuid.UUID) -> Project:
@@ -74,6 +84,8 @@ def create_job(
             provider_name="safety",
             model_version="pre-filter",
             status=GenerationStatus.REJECTED,
+            progress=100,
+            stage="rejected",
             rejection_reason=verdict.reason,
             safety_category=verdict.category,
             credits_charged=0,
@@ -182,3 +194,98 @@ def get_job(job_id: uuid.UUID, current_user: CurrentUser, session: SessionDep) -
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="المهمة غير موجودة")
     return JobOut.from_model(job)
+
+
+def _stream_snapshot(
+    session: Session, job_id: uuid.UUID, owner_id: uuid.UUID
+) -> JobProgressEvent | None:
+    """Fresh progress snapshot, read off-thread so SSE does not block the loop."""
+    session.expire_all()
+    job = job_repository.get_job_owned_by(session, job_id, owner_id)
+    return None if job is None else JobProgressEvent.from_model(job)
+
+
+@router.post(
+    "/jobs/{job_id}/stream-ticket",
+    response_model=StreamTicketOut,
+    summary="Mint a short-lived ticket for the job SSE stream",
+    responses={404: {"description": "Job not found or not owned by this user"}},
+)
+def create_stream_ticket(
+    job_id: uuid.UUID, current_user: CurrentUser, session: SessionDep
+) -> StreamTicketOut:
+    job = job_repository.get_job_owned_by(session, job_id, current_user.id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="المهمة غير موجودة")
+    ticket, expires_at, expires_in = issue_stream_ticket(
+        current_user.id, job.id, ttl_seconds=STREAM_TICKET_TTL_SECONDS
+    )
+    return StreamTicketOut(
+        job_id=job.id, ticket=ticket, expires_at=expires_at, expires_in=expires_in
+    )
+
+
+@router.get(
+    "/jobs/{job_id}/events",
+    summary="Server-Sent Events stream for one job's live progress",
+    responses={
+        401: {"description": "Missing, invalid, expired or mismatched stream ticket"},
+        404: {"description": "Job not found or not owned by the ticket's user"},
+    },
+)
+async def stream_job_events(
+    job_id: uuid.UUID,
+    ticket: Annotated[str, Query(min_length=1)],
+    session: SessionDep,
+) -> StreamingResponse:
+    claims = verify_stream_ticket(ticket, job_id=job_id)
+    if claims is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="تذكرة البث غير صالحة")
+    try:
+        owner_id = uuid.UUID(str(claims.get("sub", "")))
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="تذكرة البث غير صالحة") from exc
+    if await run_in_threadpool(job_repository.get_job_owned_by, session, job_id, owner_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="المهمة غير موجودة")
+
+    async def event_stream():
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        last_heartbeat = started
+        last_signature: tuple | None = None
+        yield ": connected\n\n"
+        while loop.time() - started < STREAM_MAX_SECONDS:
+            snapshot = await run_in_threadpool(_stream_snapshot, session, job_id, owner_id)
+            if snapshot is None:
+                yield "event: error\ndata: {\"detail\":\"job disappeared\"}\n\n"
+                return
+            signature = (
+                snapshot.status.value,
+                snapshot.progress,
+                snapshot.stage,
+                snapshot.error_message,
+                snapshot.rejection_reason,
+                snapshot.completed_at,
+            )
+            if signature != last_signature:
+                last_signature = signature
+                yield f"event: progress\ndata: {snapshot.model_dump_json()}\n\n"
+                if snapshot.status.value in TERMINAL_STATUSES:
+                    yield "event: done\ndata: {}\n\n"
+                    return
+            now = loop.time()
+            if now - last_heartbeat >= STREAM_HEARTBEAT_SECONDS:
+                yield ": keep-alive\n\n"
+                last_heartbeat = now
+            await asyncio.sleep(STREAM_POLL_SECONDS)
+        yield "event: error\ndata: {\"detail\":\"stream timeout\"}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

@@ -6,10 +6,12 @@ monkeypatch on the cached settings object and clear the shared window store
 between scenarios — deterministic, no sleeps, no flakiness.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from app.core.config import get_settings
-from app.core.ratelimit import reset_store
+from app.core.ratelimit import _client_identity, reset_store
 
 
 @pytest.fixture()
@@ -19,6 +21,9 @@ def ratelimit_enabled(monkeypatch):
     monkeypatch.setattr(settings, "RATELIMIT_WINDOW_SECONDS", 60)
     monkeypatch.setattr(settings, "RATELIMIT_AUTH_LIMIT", 3)
     monkeypatch.setattr(settings, "RATELIMIT_JOB_LIMIT", 2)
+    # TestClient's peer is the non-IP name "testclient"; trust it so the
+    # existing X-Forwarded-For scenarios keep exercising the proxy path.
+    monkeypatch.setattr(settings, "TRUSTED_PROXIES", "testclient,127.0.0.1,::1")
     reset_store()
     yield settings
     reset_store()
@@ -116,3 +121,45 @@ def test_disabled_limiter_never_blocks(client, monkeypatch):
             json={"username_or_email": "nobody", "password": "nope"},
         )
         assert response.status_code == 401
+
+
+def _request(peer: str | None, forwarded: str | None = None):
+    headers = {"x-forwarded-for": forwarded} if forwarded is not None else {}
+    client = SimpleNamespace(host=peer) if peer else None
+    return SimpleNamespace(client=client, headers=headers)
+
+
+def test_xff_ignored_from_untrusted_peer(monkeypatch):
+    monkeypatch.setattr(get_settings(), "TRUSTED_PROXIES", "127.0.0.1,::1")
+    assert _client_identity(_request("203.0.113.9", "10.0.0.5")) == "203.0.113.9"
+
+
+def test_xff_honored_from_trusted_peer_with_trusted_hops(monkeypatch):
+    monkeypatch.setattr(get_settings(), "TRUSTED_PROXIES", "127.0.0.1,10.0.0.0/8")
+    request = _request("127.0.0.1", "198.51.100.7, 10.0.0.4, 127.0.0.1")
+    assert _client_identity(request) == "198.51.100.7"
+
+
+def test_all_trusted_hops_fall_back_to_peer(monkeypatch):
+    monkeypatch.setattr(get_settings(), "TRUSTED_PROXIES", "127.0.0.1,10.0.0.0/8")
+    assert _client_identity(_request("127.0.0.1", "10.0.0.4")) == "127.0.0.1"
+
+
+def test_malformed_xff_never_becomes_identity(monkeypatch):
+    monkeypatch.setattr(get_settings(), "TRUSTED_PROXIES", "127.0.0.1")
+    assert _client_identity(_request("127.0.0.1", "not-an-ip")) == "127.0.0.1"
+
+
+def test_spoofed_xff_cannot_bypass_auth_limit(client, ratelimit_enabled, monkeypatch):
+    monkeypatch.setattr(ratelimit_enabled, "TRUSTED_PROXIES", "")
+    codes = []
+    # Login (not register): the limiter runs before credential checks, so a
+    # wrong password is enough to prove the bucket is shared across XFF values.
+    for i in range(5):
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"username_or_email": "nobody", "password": "x"},
+            headers={"X-Forwarded-For": f"10.0.0.{i}"},
+        )
+        codes.append(response.status_code)
+    assert codes == [401, 401, 401, 429, 429]

@@ -1,11 +1,13 @@
 version: 2
+# Version-update PRs are disabled to keep the queue deliberate. Security updates
+# still use these configs and their labels. Bump manifests in reviewed PRs.
 updates:
   - package-ecosystem: pip
     directory: /backend
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0
     labels:
       - dependencies
       - python
@@ -26,7 +28,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0
     labels:
       - dependencies
       - javascript
@@ -47,7 +49,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0
     labels:
       - dependencies
       - github-actions
@@ -70,7 +72,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 1
+    open-pull-requests-limit: 0
     labels:
       - dependencies
       - docker
@@ -82,7 +84,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 1
+    open-pull-requests-limit: 0
     labels:
       - dependencies
       - docker
@@ -94,7 +96,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 1
+    open-pull-requests-limit: 0
     labels:
       - dependencies
       - docker

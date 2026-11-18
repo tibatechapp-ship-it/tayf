@@ -49,10 +49,10 @@ A dispatch run uploads artifacts but never creates a GitHub Release because
 
 ## Dependency updates
 
-Dependabot proposes grouped minor and patch updates each Monday. Major version
-bumps and base-image major versions are ignored by configuration and must be
-reviewed manually. Before a release, merge or close every open dependency PR so
-`main` reflects a deliberate dependency set.
+Dependabot security updates stay enabled. Routine version-update PRs are
+disabled (`open-pull-requests-limit: 0`) so dependency changes are deliberate
+and reviewed in the same PR flow as code. Before a release, confirm the open PR
+queue contains only changes intended for that release.
 
 ## After the tag
 

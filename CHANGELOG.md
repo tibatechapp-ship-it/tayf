@@ -30,7 +30,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 - CI coverage gate (80%) plus dependency/SAST scanners: pip-audit, bandit and report-only semgrep.
 - `backend/tests/__init__.py` makes local test collection immune to unrelated `tests` packages on `PYTHONPATH`.
 - Release workflow for `v*` tags: source archives, SHA-256 checksums, CycloneDX SBOM, build provenance and generated GitHub release notes; `workflow_dispatch` is a build-only dry run.
-- Grouped Dependabot updates for pip, npm, GitHub Actions and the three container images.
+- Grouped non-major Dependabot updates for pip, npm, GitHub Actions and the three container images; major bumps stay manual.
 - `docs/RELEASING.md` documents the tag checklist, dry run and patch-release policy.
 
 ### Security

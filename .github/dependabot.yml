@@ -5,7 +5,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels:
       - dependencies
       - python
@@ -16,13 +16,17 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels:
       - dependencies
       - javascript
@@ -33,13 +37,17 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels:
       - dependencies
       - github-actions
@@ -50,45 +58,45 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
 
+  # Base-image majors are reviewed manually. Pin changes such as Python 3.15
+  # or Node 26 must not appear as routine Dependabot noise.
   - package-ecosystem: docker
     directory: /backend
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 1
     labels:
       - dependencies
       - docker
-    groups:
-      backend-image-updates:
-        patterns:
-          - "*"
+    ignore:
+      - dependency-name: "python"
 
   - package-ecosystem: docker
     directory: /frontend
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 1
     labels:
       - dependencies
       - docker
-    groups:
-      frontend-image-updates:
-        patterns:
-          - "*"
+    ignore:
+      - dependency-name: "node"
 
   - package-ecosystem: docker
     directory: /ai-gateway
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 1
     labels:
       - dependencies
       - docker
-    groups:
-      gateway-image-updates:
-        patterns:
-          - "*"
+    ignore:
+      - dependency-name: "node"

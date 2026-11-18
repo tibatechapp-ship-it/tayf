@@ -47,6 +47,13 @@ gh workflow run release.yml --repo tibatechapp-ship-it/tayf --field version=v0.6
 A dispatch run uploads artifacts but never creates a GitHub Release because
 `github.ref` is not a `v*` tag.
 
+## Dependency updates
+
+Dependabot proposes grouped minor and patch updates each Monday. Major version
+bumps and base-image major versions are ignored by configuration and must be
+reviewed manually. Before a release, merge or close every open dependency PR so
+`main` reflects a deliberate dependency set.
+
 ## After the tag
 
 - Watch the run: `gh run list --repo tibatechapp-ship-it/tayf --event push --limit 5`.

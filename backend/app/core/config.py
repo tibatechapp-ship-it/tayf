@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     # Only these peers may set X-Forwarded-For (IPs or CIDRs). Empty = ignore it.
     TRUSTED_PROXIES: str = "127.0.0.1,::1"
 
+    # --- Job execution ---
+    # false -> Starlette BackgroundTasks runs the pipeline in the API process
+    #          (dev/tests). true -> jobs stay PENDING for the external worker.
+    EXTERNAL_JOB_WORKER: bool = False
+    JOB_LEASE_SECONDS: int = 600  # worker heartbeat renews at 1/3 of this
+    JOB_POLL_SECONDS: float = 2.0  # idle delay between queue polls
+
     # --- Artifact URL signing (local storage) ---
     # false -> /files URLs require a short-lived HMAC signature (secure default)
     FILES_PUBLIC: bool = False

@@ -23,6 +23,7 @@ theme:
 nav:
   - Home: index.md
   - Development: DEVELOPMENT.md
+  - Releasing: RELEASING.md
   - Architecture: ARCHITECTURE.md
   - Operations: RUNBOOK.md
   - Security: THREAT_MODEL.md

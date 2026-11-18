@@ -4,8 +4,9 @@
 
 | Version | Supported |
 | --- | --- |
-| 0.5.x | ✅ |
-| < 0.5 | ❌ (upgrade — 0.5.0 closed the rate-limiting / artifact-URL / session-rotation gaps) |
+| 0.6.x | Yes |
+| 0.5.x | Security fixes only |
+| < 0.5 | No — upgrade; 0.5.0 closed the rate-limiting, artifact-URL and session-rotation gaps |
 
 ## Reporting a vulnerability
 

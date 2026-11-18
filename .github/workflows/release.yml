@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Existing tag to build (for example v0.6.0). Leave empty for the current ref."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-${{ inputs.version || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify release candidate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version || github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Backend tests
+        working-directory: backend
+        env:
+          JWT_SECRET: ci-only-secret-0123456789abcdef0123456789abcdef
+        run: python -m pytest -q --cov=app --cov-report=term --cov-fail-under=80
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend build
+        working-directory: frontend
+        run: npm ci && npm run build
+
+  build:
+    name: Build release artifacts
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version || github.ref }}
+          fetch-depth: 0
+
+      - name: Build source archives
+        run: |
+          set -euo pipefail
+          mkdir -p dist sbom
+          name="tayf-${GITHUB_REF_NAME}"
+          git archive --format=tar.gz --prefix="${name}/" -o "dist/${name}-source.tar.gz" HEAD
+          git archive --format=zip --prefix="${name}/" -o "dist/${name}-source.zip" HEAD
+          sha256sum dist/* > dist/SHA256SUMS
+
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom/tayf.cyclonedx.json
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/*
+            sbom/*
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tayf-release-artifacts
+          path: |
+            dist/*
+            sbom/*
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*
+            sbom/*

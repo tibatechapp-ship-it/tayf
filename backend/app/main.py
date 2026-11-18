@@ -25,6 +25,7 @@ from app.api.v1.endpoints import (
     credits_router,
     files_router,
     jobs_router,
+    payments_router,
     projects_router,
 )
 from app.api.v1.health import APP_VERSION, router as health_router
@@ -91,6 +92,7 @@ app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(projects_router, prefix=settings.API_V1_PREFIX)
 app.include_router(jobs_router, prefix=settings.API_V1_PREFIX)
 app.include_router(credits_router, prefix=settings.API_V1_PREFIX)
+app.include_router(payments_router, prefix=settings.API_V1_PREFIX)
 app.include_router(files_router, prefix=settings.API_V1_PREFIX)
 
 

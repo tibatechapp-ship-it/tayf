@@ -9,6 +9,8 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.topup import TopUpPackage, parse_packages
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -100,6 +102,15 @@ class Settings(BaseSettings):
     SIGNUP_CREDITS: int = 100
     CREDIT_PER_SCENE: int = 1
 
+    # --- Payments / top-ups ---
+    # `name:credits:price_cents`, comma-separated (e.g. "starter:50:500,pro:200:1500").
+    TOPUP_PACKAGES: str = "starter:50:500,pro:200:1500"
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_CURRENCY: str = "usd"
+    TOPUP_SUCCESS_URL: str = "http://localhost:5173/?topup=success"
+    TOPUP_CANCEL_URL: str = "http://localhost:5173/?topup=cancel"
+
     # --- Content safety ---
     SAFETY_MAX_PROMPT_CHARS: int = 2000
     SAFETY_EXTRA_BLOCKED_TERMS: str = ""  # comma-separated extra terms
@@ -135,6 +146,21 @@ class Settings(BaseSettings):
     @property
     def s3_configured(self) -> bool:
         return bool(self.S3_ENDPOINT and self.S3_BUCKET and self.S3_ACCESS_KEY and self.S3_SECRET_KEY)
+
+    @property
+    def stripe_checkout_configured(self) -> bool:
+        return bool(self.STRIPE_SECRET_KEY)
+
+    @property
+    def stripe_webhook_configured(self) -> bool:
+        return bool(self.STRIPE_WEBHOOK_SECRET)
+
+    @property
+    def topup_packages(self) -> list[TopUpPackage]:
+        return parse_packages(self.TOPUP_PACKAGES)
+
+    def get_topup_package(self, name: str) -> TopUpPackage | None:
+        return next((package for package in self.topup_packages if package.name == name), None)
 
 
 @lru_cache

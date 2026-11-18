@@ -223,6 +223,18 @@ export interface Credits {
   entries: LedgerEntry[];
 }
 
+export interface TopUpPackage {
+  name: string;
+  credits: number;
+  price_cents: number;
+  currency: string;
+}
+
+export interface CheckoutSession {
+  session_id: string;
+  checkout_url: string;
+}
+
 export interface VersionInfo {
   service: string;
   version: string;
@@ -265,6 +277,24 @@ export function fetchMe(token: string): Promise<MeResponse> {
 
 export function fetchCredits(token: string): Promise<Credits> {
   return request<Credits>("/credits/me", { token });
+}
+
+export function fetchTopUpPackages(): Promise<{
+  packages: TopUpPackage[];
+  configured: boolean;
+}> {
+  return request<{ packages: TopUpPackage[]; configured: boolean }>(
+    "/payments/topup/packages",
+    { timeout: 5000 },
+  );
+}
+
+export function createTopUpCheckout(token: string, packageName: string): Promise<CheckoutSession> {
+  return request<CheckoutSession>("/payments/topup/checkout-session", {
+    method: "POST",
+    body: { package: packageName },
+    token,
+  });
 }
 
 export function listProjects(

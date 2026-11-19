@@ -24,6 +24,7 @@ from app.api.v1.endpoints import (
     auth_router,
     costs_router,
     credits_router,
+    exports_router,
     files_router,
     jobs_router,
     payments_router,
@@ -96,6 +97,7 @@ app.include_router(credits_router, prefix=settings.API_V1_PREFIX)
 app.include_router(costs_router, prefix=settings.API_V1_PREFIX)
 app.include_router(payments_router, prefix=settings.API_V1_PREFIX)
 app.include_router(files_router, prefix=settings.API_V1_PREFIX)
+app.include_router(exports_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/")

@@ -6,6 +6,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 
 ## [Unreleased]
 
+### Added
+- Pro export for completed jobs: `GET /api/v1/jobs/{id}/export/srt` (UTF-8-BOM SRT subtitles timed from scene durations), `/export/project` (portable JSON manifest with neutral storage keys, prompt, settings and the proof hash) and `/export/stills` (ZIP of stored keyframes plus a manifest). All three are owner-scoped and add AR/EN studio export buttons. Native T2V jobs have no separate keyframes and export an empty, honestly-labelled stills archive.
+
 ## [0.7.0] — 2026-11-19
 
 ### Added

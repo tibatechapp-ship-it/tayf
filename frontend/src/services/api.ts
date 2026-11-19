@@ -279,6 +279,49 @@ export interface CheckoutSession {
   checkout_url: string;
 }
 
+export interface StageCost {
+  stage: string;
+  events: number;
+  duration_ms: number;
+  credits: number;
+}
+
+export interface ModelUsage {
+  provider: string;
+  model_version: string;
+  simulated: boolean;
+  jobs: number;
+  events: number;
+  duration_ms: number;
+  credits: number;
+}
+
+export interface JobCost {
+  job_id: string;
+  created_at: string | null;
+  status: string;
+  scenes: number;
+  credits_charged: number;
+  attributed_credits: number;
+  duration_ms: number;
+  model_version: string;
+  simulated: boolean;
+}
+
+export interface CostReport {
+  balance: number;
+  credits_charged: number;
+  credits_refunded: number;
+  credits_net: number;
+  jobs_analyzed: number;
+  scenes_generated: number;
+  total_duration_ms: number;
+  attribution: string;
+  stages: StageCost[];
+  models: ModelUsage[];
+  recent_jobs: JobCost[];
+}
+
 export interface VersionInfo {
   service: string;
   version: string;
@@ -321,6 +364,10 @@ export function fetchMe(token: string): Promise<MeResponse> {
 
 export function fetchCredits(token: string): Promise<Credits> {
   return request<Credits>("/credits/me", { token });
+}
+
+export function fetchCostReport(token: string, limit = 50): Promise<CostReport> {
+  return request<CostReport>(`/costs/me?limit=${limit}`, { token });
 }
 
 export function fetchTopUpPackages(): Promise<{

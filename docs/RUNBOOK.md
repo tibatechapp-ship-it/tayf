@@ -76,6 +76,11 @@ ORDER BY created_at;
 If a job fails after charging, the pipeline writes a compensating refund with a
 unique operation key. Verify the ledger before re-running a failed job.
 
+`GET /api/v1/costs/me` is read-only: it sums `job_charge` and `refund_job_*`
+ledger rows, then joins the latest jobs' `proof_events` for stage timings and
+provider/model usage. A zero stage-credit row is normal — only scene generation
+(`keyframes` or `video`) carries the per-scene charge.
+
 ## Storage lifecycle
 
 - Artifacts live under `jobs/<job_id>/…`.

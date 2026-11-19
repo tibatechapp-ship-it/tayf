@@ -112,6 +112,27 @@ export interface Copy {
   approvalBusy: string;
   approvalRejected: string;
 
+  // cost dashboard
+  costTitle: string;
+  costHint: string;
+  costCharged: string;
+  costRefunded: string;
+  costNet: string;
+  costJobs: string;
+  costScenes: string;
+  costRuntime: string;
+  costStages: string;
+  costModels: string;
+  costStage: string;
+  costEvents: string;
+  costCredits: string;
+  costDuration: string;
+  costProvider: string;
+  costEmpty: string;
+  costLoading: string;
+  costRefresh: string;
+  costAttribution: string;
+
   // ledger + cancellation
   ledgerTitle: string;
   ledgerEmpty: string;
@@ -245,6 +266,26 @@ export const copy: Record<Lang, Copy> = {
     approvalBusy: "جارٍ الإرسال…",
     approvalRejected: "تم رفض المرحلة",
 
+    costTitle: "لوحة التكاليف",
+    costHint: "الرصيد هو وحدة الدفع؛ الأرقام من دفتر الرصيد وإثبات المراحل.",
+    costCharged: "المدفوع",
+    costRefunded: "المسترد",
+    costNet: "الصافي",
+    costJobs: "المهام المحللة",
+    costScenes: "المشاهد المولدة",
+    costRuntime: "زمن المعالجة",
+    costStages: "التكلفة حسب المرحلة",
+    costModels: "استهلاك النماذج",
+    costStage: "المرحلة",
+    costEvents: "المراحل المسجلة",
+    costCredits: "الرصيد",
+    costDuration: "الزمن",
+    costProvider: "المزود",
+    costEmpty: "لا توجد بيانات تكلفة بعد.",
+    costLoading: "جارٍ تحميل التكاليف…",
+    costRefresh: "تحديث التكاليف",
+    costAttribution: "تُنسب تكلفة كل مشهد إلى مرحلة توليد المشهد (صور أو فيديو).",
+
     ledgerTitle: "دفتر الرصيد",
     ledgerEmpty: "لا حركات بعد.",
     ledgerSignup: "مكافأة التسجيل",
@@ -375,6 +416,26 @@ export const copy: Record<Lang, Copy> = {
     approvalReject: "Reject and cancel job",
     approvalBusy: "Sending…",
     approvalRejected: "Stage rejected",
+
+    costTitle: "Cost dashboard",
+    costHint: "Credits are the settlement unit; figures come from the ledger and stage proof.",
+    costCharged: "Charged",
+    costRefunded: "Refunded",
+    costNet: "Net",
+    costJobs: "Jobs analyzed",
+    costScenes: "Scenes generated",
+    costRuntime: "Processing time",
+    costStages: "Cost by stage",
+    costModels: "Model consumption",
+    costStage: "Stage",
+    costEvents: "Stage events",
+    costCredits: "Credits",
+    costDuration: "Time",
+    costProvider: "Provider",
+    costEmpty: "No cost data yet.",
+    costLoading: "Loading costs…",
+    costRefresh: "Refresh costs",
+    costAttribution: "Each scene's credits are attributed to its generation stage (images or video).",
 
     ledgerTitle: "Credit ledger",
     ledgerEmpty: "No movements yet.",

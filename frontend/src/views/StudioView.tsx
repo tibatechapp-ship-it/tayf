@@ -7,6 +7,7 @@ import {
   decideJobApproval,
   createProject,
   createTopUpCheckout,
+  fetchCostReport,
   fetchCredits,
   fetchJob,
   fetchJobProof,
@@ -17,6 +18,7 @@ import {
   listProjects,
   subscribeJobEvents,
   type ApprovalGate,
+  type CostReport,
   type Job,
   type JobProof,
   type JobProgressEvent,
@@ -82,6 +84,10 @@ export default function StudioView({
   const [proofLoadingId, setProofLoadingId] = useState<string | null>(null);
   const [proofError, setProofError] = useState<string | null>(null);
 
+  const [costReport, setCostReport] = useState<CostReport | null>(null);
+  const [costLoading, setCostLoading] = useState(false);
+  const [costError, setCostError] = useState<string | null>(null);
+
   const token = getToken() ?? "";
   const pollTimer = useRef<number | null>(null);
   const streamClosers = useRef<Map<string, () => void>>(new Map());
@@ -104,6 +110,19 @@ export default function StudioView({
     [token, showArchived],
   );
 
+  const refreshCosts = useCallback(async () => {
+    setCostLoading(true);
+    try {
+      const report = await fetchCostReport(token);
+      setCostReport(report);
+      setCostError(null);
+    } catch (err) {
+      setCostError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCostLoading(false);
+    }
+  }, [token]);
+
   const refreshJobs = useCallback(async () => {
     if (!selectedId) return;
     try {
@@ -113,11 +132,12 @@ export default function StudioView({
       if (!active) {
         const credits = await fetchCredits(token);
         onBalanceChange(credits.balance);
+        void refreshCosts();
       }
     } catch {
       /* transient poll errors are non-fatal; the next tick retries */
     }
-  }, [token, selectedId, onBalanceChange]);
+  }, [token, selectedId, onBalanceChange, refreshCosts]);
 
   const refreshLedger = useCallback(async () => {
     try {
@@ -194,7 +214,8 @@ export default function StudioView({
   useEffect(() => {
     void refreshProjects(false);
     void refreshLedger();
-  }, [refreshProjects, refreshLedger]);
+    void refreshCosts();
+  }, [refreshProjects, refreshLedger, refreshCosts]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -391,6 +412,10 @@ export default function StudioView({
     return extra[stage] ?? stageLabel(stage);
   }
 
+  function formatDuration(ms: number): string {
+    return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms} ms`;
+  }
+
   function ApprovalReview({ gate }: { gate: ApprovalGate }) {
     const rawScenes = Array.isArray(gate.review.scenes) ? gate.review.scenes : [];
     const scenes = rawScenes as Array<{
@@ -559,6 +584,109 @@ export default function StudioView({
                 </li>
               ))}
             </ul>
+          </details>
+
+          <details className="cost-dashboard" data-testid="cost-dashboard">
+            <summary>{t.costTitle}</summary>
+            <p className="hint">{t.costHint}</p>
+            <button
+              type="button"
+              className="link"
+              onClick={() => void refreshCosts()}
+              disabled={costLoading}
+              data-testid="cost-refresh"
+            >
+              {costLoading ? t.costLoading : t.costRefresh}
+            </button>
+            {costError && <p className="panel panel-error">{costError}</p>}
+            {costReport && (
+              <>
+                <dl className="cost-kpis">
+                  <div>
+                    <dt>{t.costCharged}</dt>
+                    <dd dir="ltr">{costReport.credits_charged} {t.creditsUnit}</dd>
+                  </div>
+                  <div>
+                    <dt>{t.costRefunded}</dt>
+                    <dd dir="ltr">{costReport.credits_refunded} {t.creditsUnit}</dd>
+                  </div>
+                  <div>
+                    <dt>{t.costNet}</dt>
+                    <dd dir="ltr">{costReport.credits_net} {t.creditsUnit}</dd>
+                  </div>
+                  <div>
+                    <dt>{t.costJobs}</dt>
+                    <dd dir="ltr">{costReport.jobs_analyzed}</dd>
+                  </div>
+                  <div>
+                    <dt>{t.costScenes}</dt>
+                    <dd dir="ltr">{costReport.scenes_generated}</dd>
+                  </div>
+                  <div>
+                    <dt>{t.costRuntime}</dt>
+                    <dd dir="ltr">{formatDuration(costReport.total_duration_ms)}</dd>
+                  </div>
+                </dl>
+                <p className="hint cost-attribution">{t.costAttribution}</p>
+
+                <h4>{t.costStages}</h4>
+                {costReport.stages.length === 0 && <p className="hint">{t.costEmpty}</p>}
+                {costReport.stages.length > 0 && (
+                  <table className="cost-table">
+                    <thead>
+                      <tr>
+                        <th>{t.costStage}</th>
+                        <th>{t.costEvents}</th>
+                        <th>{t.costDuration}</th>
+                        <th>{t.costCredits}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {costReport.stages.map((stage) => (
+                        <tr key={stage.stage}>
+                          <td>{proofStageLabel(stage.stage)}</td>
+                          <td dir="ltr">{stage.events}</td>
+                          <td dir="ltr">{formatDuration(stage.duration_ms)}</td>
+                          <td dir="ltr">{stage.credits}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                <h4>{t.costModels}</h4>
+                {costReport.models.length === 0 && <p className="hint">{t.costEmpty}</p>}
+                {costReport.models.length > 0 && (
+                  <table className="cost-table">
+                    <thead>
+                      <tr>
+                        <th>{t.costProvider}</th>
+                        <th>{t.proofModel}</th>
+                        <th>{t.costDuration}</th>
+                        <th>{t.costCredits}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {costReport.models.map((model) => (
+                        <tr
+                          key={`${model.provider}:${model.model_version}:${model.simulated}`}
+                        >
+                          <td>
+                            {model.provider}
+                            <em className={model.simulated ? "tag simulated" : "tag real"}>
+                              {model.simulated ? t.simulatedBadge : t.realBadge}
+                            </em>
+                          </td>
+                          <td dir="ltr">{model.model_version || "-"}</td>
+                          <td dir="ltr">{formatDuration(model.duration_ms)}</td>
+                          <td dir="ltr">{model.credits}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </>
+            )}
           </details>
         </aside>
 

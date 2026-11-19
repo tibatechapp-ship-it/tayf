@@ -23,8 +23,8 @@ published tag breaks consumers and provenance verification.
 From a clean checkout of `main`:
 
 ```bash
-git tag -a v0.6.0 -m "Tayf 0.6.0"
-git push origin v0.6.0
+git tag -a v0.7.0 -m "Tayf 0.7.0"
+git push origin v0.7.0
 ```
 
 The tag push triggers `.github/workflows/release.yml`:
@@ -41,7 +41,7 @@ The tag push triggers `.github/workflows/release.yml`:
 Use the workflow dispatcher when you only want to validate the build path:
 
 ```bash
-gh workflow run release.yml --repo tibatechapp-ship-it/tayf --field version=v0.6.0
+gh workflow run release.yml --repo tibatechapp-ship-it/tayf --field version=v0.7.0
 ```
 
 A dispatch run uploads artifacts but never creates a GitHub Release because

@@ -120,7 +120,20 @@ pipeline in-process, which keeps the suite deterministic.
 - The product still has no TTS/voiceover stage. Future voice work can consume
   the normalized storyboard text, but no audio is claimed today.
 
-## 10. Known limits
+## 10. Smart presets
+
+- `frontend/src/presets.ts` holds a built-in catalog and validated custom
+  recipes stored under the non-sensitive `tayf.presets` localStorage key.
+- A preset only fills the five values `createJob` already accepts: prompt,
+  scene count, aspect, style and the human-approval flag. No API schema or
+  migration is touched.
+- Custom recipes are capped at 12, deduplicated by id and dropped on load if
+  their shape is invalid; a browser storage failure is reported to the user.
+  Recipes stay on one device by design — there is no account sync.
+- No voice/TTS field exists because Tayf has no audio stage; Arabic presets
+  feed the existing Arabic NLP normalization and proof trail.
+
+## 11. Known limits
 
 - The in-process rate limiter is per replica; use an edge limiter for multi-replica deployments.
 - SQLite remains a portable default, not a high-concurrency production database.

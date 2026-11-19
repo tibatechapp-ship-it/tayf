@@ -28,6 +28,15 @@ import {
   type Project,
   type TopUpPackage,
 } from "../services/api";
+import {
+  BUILTIN_PRESETS,
+  loadCustomPresets,
+  makeCustomPreset,
+  MAX_CUSTOM_PRESETS,
+  MAX_PRESET_NAME_LENGTH,
+  saveCustomPresets,
+  type Preset,
+} from "../presets";
 
 interface Props {
   lang: Lang;
@@ -93,6 +102,11 @@ export default function StudioView({
   const [costError, setCostError] = useState<string | null>(null);
   const [exportBusyId, setExportBusyId] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  const [customPresets, setCustomPresets] = useState<Preset[]>(() => loadCustomPresets());
+  const [presetName, setPresetName] = useState("");
+  const [presetError, setPresetError] = useState<string | null>(null);
+  const [presetNotice, setPresetNotice] = useState<string | null>(null);
 
   const token = getToken() ?? "";
   const pollTimer = useRef<number | null>(null);
@@ -286,6 +300,66 @@ export default function StudioView({
       await refreshProjects(true);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function presetLabel(preset: Preset): string {
+    return preset.nameKey ? t[preset.nameKey] : preset.name;
+  }
+
+  function applyPreset(preset: Preset) {
+    setPrompt(preset.prompt);
+    setNumScenes(preset.numScenes);
+    setAspect(preset.aspect);
+    setStyle(preset.style);
+    setRequireApprovals(preset.requireApprovals);
+    setPresetError(null);
+    setPresetNotice(null);
+  }
+
+  function handleSavePreset() {
+    const name = presetName.trim();
+    setPresetNotice(null);
+    if (!name) {
+      setPresetError(t.presetNameMissing);
+      return;
+    }
+    if (name.length > MAX_PRESET_NAME_LENGTH) {
+      setPresetError(t.presetNameTooLong);
+      return;
+    }
+    if (prompt.trim().length < 3) {
+      setPresetError(t.presetPromptMissing);
+      return;
+    }
+    if (customPresets.length >= MAX_CUSTOM_PRESETS) {
+      setPresetError(t.presetLimitReached);
+      return;
+    }
+    try {
+      const next = [
+        ...customPresets,
+        makeCustomPreset(name, { prompt, numScenes, aspect, style, requireApprovals }),
+      ];
+      saveCustomPresets(next);
+      setCustomPresets(next);
+      setPresetName("");
+      setPresetError(null);
+      setPresetNotice(t.presetSaved);
+    } catch {
+      setPresetError(t.presetSaveError);
+    }
+  }
+
+  function handleDeletePreset(id: string) {
+    setPresetNotice(null);
+    try {
+      const next = customPresets.filter((preset) => preset.id !== id);
+      saveCustomPresets(next);
+      setCustomPresets(next);
+      setPresetError(null);
+    } catch {
+      setPresetError(t.presetSaveError);
     }
   }
 
@@ -731,6 +805,61 @@ export default function StudioView({
 
               <form onSubmit={handleCreateJob} className="card stack">
                 <h3>{t.newJob}</h3>
+                <div className="preset-panel">
+                  <div className="preset-head">
+                    <strong>{t.presetsTitle}</strong>
+                    <span className="muted">{t.presetsHint}</span>
+                  </div>
+                  <div className="preset-list">
+                    {[...BUILTIN_PRESETS, ...customPresets].map((preset) => (
+                      <div className="preset-item" key={preset.id}>
+                        <button
+                          type="button"
+                          className="preset-apply"
+                          onClick={() => applyPreset(preset)}
+                          data-testid={`preset-apply-${preset.id}`}
+                        >
+                          {presetLabel(preset)}
+                          <em className="tag">
+                            {preset.builtin ? t.presetBuiltIn : t.presetCustom}
+                          </em>
+                        </button>
+                        {!preset.builtin && (
+                          <button
+                            type="button"
+                            className="preset-delete"
+                            onClick={() => handleDeletePreset(preset.id)}
+                            aria-label={`${t.presetDelete}: ${presetLabel(preset)}`}
+                          >
+                            {t.presetDelete}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="row preset-save-row">
+                    <input
+                      value={presetName}
+                      maxLength={MAX_PRESET_NAME_LENGTH}
+                      onChange={(e) => setPresetName(e.target.value)}
+                      placeholder={t.presetNamePlaceholder}
+                      aria-label={t.presetNamePlaceholder}
+                    />
+                    <button type="button" onClick={handleSavePreset}>
+                      {t.presetSave}
+                    </button>
+                  </div>
+                  {presetError && (
+                    <p className="panel panel-error" role="alert">
+                      {presetError}
+                    </p>
+                  )}
+                  {presetNotice && (
+                    <p className="hint" role="status">
+                      {presetNotice}
+                    </p>
+                  )}
+                </div>
                 <label className="field">
                   <span>{t.promptLabel}</span>
                   <textarea

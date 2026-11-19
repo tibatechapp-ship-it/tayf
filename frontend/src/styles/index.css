@@ -119,6 +119,57 @@ code {
   font-size: 0.9rem;
 }
 
+/* smart presets */
+.preset-panel {
+  border: 1px dashed var(--card-edge);
+  border-radius: var(--radius);
+  background: var(--bg-raise);
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.preset-head {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.preset-list {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.preset-item {
+  display: flex;
+  gap: 0.25rem;
+  align-items: stretch;
+}
+
+.preset-apply {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.preset-apply .tag {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  font-style: normal;
+}
+
+.preset-delete {
+  color: var(--err);
+  padding: 0.55rem 0.6rem;
+}
+
+.preset-save-row input {
+  flex: 1 1 220px;
+}
+
 input,
 select,
 textarea {

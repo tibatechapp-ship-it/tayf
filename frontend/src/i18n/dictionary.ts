@@ -122,6 +122,26 @@ export interface Copy {
   exportErrorPrefix: string;
   arabicReady: string;
 
+  // smart presets
+  presetsTitle: string;
+  presetsHint: string;
+  presetBuiltIn: string;
+  presetCustom: string;
+  presetSave: string;
+  presetDelete: string;
+  presetNamePlaceholder: string;
+  presetNameMissing: string;
+  presetNameTooLong: string;
+  presetPromptMissing: string;
+  presetLimitReached: string;
+  presetSaved: string;
+  presetSaveError: string;
+  presetCinematicArabic: string;
+  presetVerticalReel: string;
+  presetReviewFirst: string;
+  presetAnimeStory: string;
+  presetNoirShort: string;
+
   // cost dashboard
   costTitle: string;
   costHint: string;
@@ -285,6 +305,25 @@ export const copy: Record<Lang, Copy> = {
     exportErrorPrefix: "فشل التصدير: ",
     arabicReady: "نص عربي مُطبَّع",
 
+    presetsTitle: "قوالب سريعة",
+    presetsHint: "قالب جاهز يملأ النموذج، وقالبك أنت يُحفظ على هذا الجهاز فقط.",
+    presetBuiltIn: "جاهز",
+    presetCustom: "مخصص",
+    presetSave: "احفظ الحالي",
+    presetDelete: "حذف",
+    presetNamePlaceholder: "اسم القالب (اختياري للحفظ)",
+    presetNameMissing: "اكتب اسمًا للقالب قبل الحفظ.",
+    presetNameTooLong: "اسم القالب طويل جدًا.",
+    presetPromptMissing: "اكتب وصفًا قبل حفظ القالب.",
+    presetLimitReached: "وصلت للحد الأقصى لقوالبك المحفوظة؛ احذف قالبًا أولًا.",
+    presetSaved: "تم حفظ القالب على هذا الجهاز.",
+    presetSaveError: "تعذّر حفظ القالب في هذا المتصفح.",
+    presetCinematicArabic: "سينمائي عربي",
+    presetVerticalReel: "ريل عمودي",
+    presetReviewFirst: "مراجعة أولًا",
+    presetAnimeStory: "قصة أنمي",
+    presetNoirShort: "نوار قصير",
+
     costTitle: "لوحة التكاليف",
     costHint: "الرصيد هو وحدة الدفع؛ الأرقام من دفتر الرصيد وإثبات المراحل.",
     costCharged: "المدفوع",
@@ -444,6 +483,25 @@ export const copy: Record<Lang, Copy> = {
     exportBusy: "Exporting…",
     exportErrorPrefix: "Export failed: ",
     arabicReady: "Arabic normalized",
+
+    presetsTitle: "Quick presets",
+    presetsHint: "A built-in fills the form; your own recipes stay on this device only.",
+    presetBuiltIn: "built-in",
+    presetCustom: "custom",
+    presetSave: "Save current",
+    presetDelete: "Delete",
+    presetNamePlaceholder: "Preset name (optional before saving)",
+    presetNameMissing: "Enter a name before saving.",
+    presetNameTooLong: "Preset name is too long.",
+    presetPromptMissing: "Write a prompt before saving this preset.",
+    presetLimitReached: "Custom preset limit reached; delete one first.",
+    presetSaved: "Preset saved on this device.",
+    presetSaveError: "This browser could not store the preset.",
+    presetCinematicArabic: "Cinematic Arabic",
+    presetVerticalReel: "Vertical reel",
+    presetReviewFirst: "Review first",
+    presetAnimeStory: "Anime story",
+    presetNoirShort: "Noir short",
 
     costTitle: "Cost dashboard",
     costHint: "Credits are the settlement unit; figures come from the ledger and stage proof.",

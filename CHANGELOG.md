@@ -7,6 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 ## [Unreleased]
 
 ### Added
+- Smart presets: five built-in Arabic recipes plus user-saved recipes in `tayf.presets` localStorage. Applying a preset fills the existing prompt/scenes/aspect/style/approval fields; saving and deleting custom recipes are validated and capped at 12. No backend fields, migration, account sync or voice/TTS field is added.
 - Pro export for completed jobs: `GET /api/v1/jobs/{id}/export/srt` (UTF-8-BOM SRT subtitles timed from scene durations), `/export/project` (portable JSON manifest with neutral storage keys, prompt, settings and the proof hash) and `/export/stills` (ZIP of stored keyframes plus a manifest). All three are owner-scoped and add AR/EN studio export buttons. Native T2V jobs have no separate keyframes and export an empty, honestly-labelled stills archive.
 - Arabic NLP depth (batch 1): deterministic prompt/storyboard normalization (alef variants, tatweel, Arabic-Indic digits, Arabic punctuation), a code-mixing audit and Arabic rules in the shared storyboard system prompt. Every change is recorded as an `arabic_nlp` proof event; the original prompt is untouched. No migration, no invented grammar fixes and no simulated TTS.
 

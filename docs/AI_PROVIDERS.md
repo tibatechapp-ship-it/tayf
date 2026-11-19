@@ -55,7 +55,7 @@ from `replicate.delivery`, sniffed to confirm a real MP4/WebM container,
 size-capped, safety-checked, and stored as the job artifact. A real thumbnail
 is extracted from that video with ffmpeg when ffmpeg is available.
 
-Scene `image_url` values stay `null` on this path — Tayf does not fabricate
+Scene `image_url` values stay `null` on this path — Al-Manazir does not fabricate
 stills the vendor never returned. `simulated=false` is set only because the
 motion media itself is real.
 

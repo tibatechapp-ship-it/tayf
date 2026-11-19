@@ -1,4 +1,4 @@
-# Security Policy — Tayf Studio
+# Security Policy — Al-Manazir
 
 ## Supported versions
 
@@ -22,7 +22,7 @@ looks like. You will get an acknowledgement within **72 hours** and a status
 update at least every 7 days until the issue is resolved. We credit reporters
 in the changelog unless they prefer to stay anonymous.
 
-## Security model — what Tayf does (and does not) promise
+## Security model — what Al-Manazir does (and does not) promise
 
 Implemented and test-backed:
 

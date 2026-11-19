@@ -1,4 +1,4 @@
-"""Typed application settings — the unified Tayf Studio configuration.
+"""Typed application settings — the unified Al-Manazir configuration.
 
 Every value comes from the environment (or the repo-root ``.env``).
 No secret ever lives in source code. In production ``JWT_SECRET`` MUST be

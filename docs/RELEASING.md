@@ -1,6 +1,6 @@
 # Releasing
 
-Tayf is pre-1.0. Releases are tags on `main`; no package is published to an
+Al-Manazir is pre-1.0. Releases are tags on `main`; no package is published to an
 external registry. A tag creates a GitHub Release with source archives, an
 SBOM and signed build provenance.
 

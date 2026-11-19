@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the report. Tayf takes "no fabricated success" seriously —
+        Thanks for the report. Al-Manazir takes "no fabricated success" seriously —
         include commands and outputs, not just a description.
   - type: textarea
     id: what-happened

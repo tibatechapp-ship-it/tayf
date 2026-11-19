@@ -1,4 +1,4 @@
-# Contributing to Tayf Studio
+# Contributing to Al-Manazir
 
 شكرًا لاهتمامك! المشروع مبني على قواعد غير قابلة للتفاوض — احترمها وسيكون التعاون سهلًا.
 

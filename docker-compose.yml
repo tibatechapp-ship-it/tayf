@@ -1,4 +1,4 @@
-# Tayf Studio — production-oriented compose stack (v0.5.0).
+# Al-Manazir — production-oriented compose stack (v0.5.0).
 #
 # Builds real images (backend/Dockerfile, frontend/Dockerfile, ai-gateway/Dockerfile),
 # runs everything as non-root, with healthchecks and a named volume for data.

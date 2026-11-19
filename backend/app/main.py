@@ -1,4 +1,4 @@
-"""Tayf Studio API — entry point.
+"""Al-Manazir API — entry point.
 
 The unified build (Stage 4 merge) provides, all REAL:
   - Auth: Argon2id + JWT (register / login / me)
@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Tayf Studio API",
+    title="Al-Manazir API",
     version=APP_VERSION,
     description=(
         "AI video generation platform (Arabic-first). The unified build adds "

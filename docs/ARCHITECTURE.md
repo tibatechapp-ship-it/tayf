@@ -1,4 +1,4 @@
-# Architecture — Tayf Studio
+# Architecture — Al-Manazir
 
 Status: **current as of 2026-11-18**. This document describes shipped
 behavior, verified by CI run `44281037955` (197 passed, 82.57% coverage).
@@ -130,7 +130,7 @@ pipeline in-process, which keeps the suite deterministic.
 - Custom recipes are capped at 12, deduplicated by id and dropped on load if
   their shape is invalid; a browser storage failure is reported to the user.
   Recipes stay on one device by design — there is no account sync.
-- No voice/TTS field exists because Tayf has no audio stage; Arabic presets
+- No voice/TTS field exists because Al-Manazir has no audio stage; Arabic presets
   feed the existing Arabic NLP normalization and proof trail.
 
 ## 11. Chunked long video
@@ -153,7 +153,25 @@ pipeline in-process, which keeps the suite deterministic.
   stream and falls back to the existing 4-second poll instead of silently
   waiting for a timeout.
 
-## 12. Known limits
+## 12. Al-Manazir identity and entitlements
+
+- The product brand is **Al-Manazir** (المناظر) across UI, docs, watermark and
+  Stripe product names. Repository and module names stay `tayf` for stability.
+- Entitlement is server-owned: `users.plan` is `free` by default. A paid Stripe
+  checkout for the configured `pro` package flips it to `pro` through the signed
+  webhook and records an idempotent `pro_grants` row keyed by session id.
+- Job creation snapshots `{brand, plan, watermark, policy_version}` into the
+  existing `generation_jobs.input_params`, so the client cannot self-upgrade and
+  a later plan change cannot rewrite an accepted job.
+- Free jobs apply `apply_watermark()` once to the final bytes after composition;
+  Pro jobs skip it and keep vendor bytes untouched. Stored chunks stay neutral,
+  so resume and approval recovery never double-brand a video. Pre-Batch-2 jobs
+  have no snapshot and keep their legacy behavior.
+- `compose` proof events record `watermark`, `brand` and `watermark_applied`.
+  If ffmpeg or a font is unavailable, a Free render fails closed instead of
+  shipping an unbranded video.
+
+## 13. Known limits
 
 - The in-process rate limiter is per replica; use an edge limiter for multi-replica deployments.
 - SQLite remains a portable default, not a high-concurrency production database.

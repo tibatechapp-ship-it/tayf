@@ -5,6 +5,9 @@ export type Lang = "ar" | "en";
 export interface Copy {
   dir: "rtl" | "ltr";
   brand: string;
+  planFree: string;
+  planPro: string;
+  planFreeHint: string;
   tagline: string;
   switchLabel: string;
 
@@ -193,7 +196,10 @@ export interface Copy {
 export const copy: Record<Lang, Copy> = {
   ar: {
     dir: "rtl",
-    brand: "طيف",
+    brand: "المناظر",
+    planFree: "مجاني",
+    planPro: "Pro",
+    planFreeHint: "الفيديو المجاني يحمل علامة المناظر",
     tagline: "استوديو توليد الفيديو بالذكاء الاصطناعي",
     switchLabel: "English",
 
@@ -372,7 +378,10 @@ export const copy: Record<Lang, Copy> = {
   },
   en: {
     dir: "ltr",
-    brand: "Tayf",
+    brand: "Al-Manazir",
+    planFree: "Free",
+    planPro: "Pro",
+    planFreeHint: "Free videos include the Al-Manazir watermark",
     tagline: "AI video generation studio",
     switchLabel: "العربية",
 

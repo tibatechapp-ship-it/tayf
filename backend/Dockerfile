@@ -10,9 +10,10 @@ RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt -r requirem
 
 # --- stage 2: runtime --------------------------------------------------------
 FROM python:3.12-slim
-# ffmpeg is REQUIRED for real MP4 composition (services/compose.py).
+# ffmpeg is REQUIRED for real MP4 composition (services/compose.py); DejaVu
+# provides the drawtext font used by the Al-Manazir watermark.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --uid 10001 tayf

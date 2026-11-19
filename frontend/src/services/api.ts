@@ -1,5 +1,5 @@
 // ============================================================
-// Tayf Studio - unified HTTP client (zero mock data)
+// Al-Manazir - unified HTTP client (zero mock data)
 // ------------------------------------------------------------
 // HONESTY RULE: every function here calls the REAL backend
 // through the Vite dev proxy ('/api' -> http://127.0.0.1:8000).
@@ -124,6 +124,7 @@ export interface UserOut {
   email: string;
   username: string;
   created_at: string;
+  plan: "free" | "pro" | string;
 }
 
 export interface TokenResponse {

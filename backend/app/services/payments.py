@@ -51,7 +51,10 @@ async def create_checkout_session(
         ("line_items[0][quantity]", "1"),
         ("line_items[0][price_data][currency]", package.currency),
         ("line_items[0][price_data][unit_amount]", str(package.price_cents)),
-        ("line_items[0][price_data][product_data][name]", f"Tayf credits - {package.name}"),
+        (
+            "line_items[0][price_data][product_data][name]",
+            f"Al-Manazir credits - {package.name}",
+        ),
         ("metadata[package]", package.name),
         ("metadata[credits]", str(package.credits)),
     ]

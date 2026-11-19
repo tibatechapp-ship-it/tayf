@@ -28,8 +28,15 @@ from app.models.base import utc_now
 from app.services import approvals, job_state
 from app.services.ai.base import Scene, Storyboard
 from app.services.ai.factory import get_ai_provider
-from app.services.compose import ComposerError, compose_video, extract_thumbnail
+from app.services.compose import (
+    ComposeResult,
+    ComposerError,
+    compose_video,
+    concat_videos,
+    extract_thumbnail,
+)
 from app.services.storage.factory import get_storage
+from app.services.video_chunks import chunk_object_key, plan_chunks
 
 
 def _fail(db: Session, job: GenerationJob, message: str, category: str | None = None) -> bool:
@@ -91,11 +98,17 @@ def _proof(
         print(f"[proof] could not record stage '{stage}': {exc}")
 
 
-def _storyboard_from_job(job: GenerationJob) -> tuple[Storyboard, list[dict]]:
+def _storyboard_from_job(job: GenerationJob) -> tuple[Storyboard, list[dict], list[dict]]:
     """Rebuild the in-memory storyboard after a resume (no re-generation cost)."""
     raw = job.storyboard if isinstance(job.storyboard, dict) else {}
     scenes: list[Scene] = []
     payload: list[dict] = []
+    chunks_raw = raw.get("chunks")
+    chunks = (
+        [item for item in chunks_raw if isinstance(item, dict)]
+        if isinstance(chunks_raw, list)
+        else []
+    )
     for item in raw.get("scenes", []) if isinstance(raw.get("scenes", []), list) else []:
         if not isinstance(item, dict):
             continue
@@ -120,7 +133,82 @@ def _storyboard_from_job(job: GenerationJob) -> tuple[Storyboard, list[dict]]:
                 "image_url": item.get("image_url"),
             }
         )
-    return Storyboard(title=str(raw.get("title") or ""), scenes=scenes), payload
+    return Storyboard(title=str(raw.get("title") or ""), scenes=scenes), payload, chunks
+
+
+def _stored_bytes(storage, key: object) -> bytes | None:
+    """Read a committed artifact, treating a missing file as a cache miss."""
+    if not isinstance(key, str) or not key:
+        return None
+    try:
+        return storage.get_bytes(key)
+    except Exception:
+        return None
+
+
+def _chunk_credits(total: int, index: int, count: int) -> int:
+    """Split the job charge across chunks without losing or duplicating credits."""
+    if count <= 0:
+        return 0
+    base = total // count
+    extra = 1 if index < total % count else 0
+    return base + extra
+
+
+def _ensure_chunk_records(
+    payload: dict,
+    scenes: list[Scene],
+    *,
+    native: bool,
+    job_id: UUID,
+) -> list[dict]:
+    """Reuse the committed chunk plan, or create one for legacy/new jobs."""
+    plan = plan_chunks(scenes, native=native)
+    existing = payload.get("chunks")
+    if (
+        isinstance(existing, list)
+        and len(existing) == len(plan)
+        and all(isinstance(item, dict) for item in existing)
+    ):
+        return existing
+    records: list[dict] = []
+    for chunk in plan:
+        records.append(
+            {
+                "index": chunk.index,
+                "scene_start": chunk.scene_start,
+                "scene_end": chunk.scene_end,
+                "duration_seconds": chunk.duration_seconds,
+                "key": chunk_object_key(str(job_id), chunk.index),
+                "status": "planned",
+            }
+        )
+    payload["chunks"] = records
+    return records
+
+
+def _chunk_scenes(storyboard: Storyboard, record: dict) -> list[Scene]:
+    start = int(record.get("scene_start") or 0)
+    end = int(record.get("scene_end") or 0)
+    return [scene for scene in storyboard.scenes if start <= scene.index <= end]
+
+
+def _save_storyboard(
+    db: Session,
+    job: GenerationJob,
+    storyboard: Storyboard,
+    scenes_payload: list[dict],
+    chunks_payload: list[dict],
+) -> None:
+    """Persist a structurally new JSON value (SQLAlchemy needs a real change)."""
+    job.storyboard = copy.deepcopy(
+        {
+            "title": storyboard.title,
+            "scenes": scenes_payload,
+            "chunks": chunks_payload,
+        }
+    )
+    db.commit()
 
 
 def _hold(
@@ -199,8 +287,9 @@ async def run_job_pipeline(
         job.model_version = str(getattr(provider, "model_version", "") or "")
         job.simulated = bool(provider.simulated)
         db.commit()
+        chunks_payload: list[dict] = []
         if resume_from == "storyboard":
-            storyboard, _ = _storyboard_from_job(job)
+            storyboard, _, chunks_payload = _storyboard_from_job(job)
         else:
             storyboard_started = utc_now()
             _progress(db, job, 10, "storyboard")
@@ -348,9 +437,22 @@ async def run_job_pipeline(
         # in place by the keyframe step below; if the committed attribute value
         # shared that nested list, SQLAlchemy's old==new check would never see
         # a difference and the image_url update would silently vanish.
-        storyboard_payload = copy.deepcopy({"title": storyboard.title, "scenes": scenes_payload})
+        chunks_payload = _ensure_chunk_records(
+            {"chunks": chunks_payload},
+            storyboard.scenes,
+            native=provider.supports_native_video,
+            job_id=job.id,
+        )
+        storyboard_payload = copy.deepcopy(
+            {
+                "title": storyboard.title,
+                "scenes": scenes_payload,
+                "chunks": chunks_payload,
+            }
+        )
         job.storyboard = copy.deepcopy(storyboard_payload)
         db.commit()
+        chunks_payload = storyboard_payload["chunks"]  # mutate the copy we persist
 
         # ---- human gate 1: review the generated script before spending on assets ----
         if job.require_approvals and resume_from is None:
@@ -367,7 +469,7 @@ async def run_job_pipeline(
         # ---- 3a) native text-to-video: vendor renders motion directly ----
         if provider.supports_native_video:
             if resume_from == "assets":
-                # The approved bytes are already in storage — never re-generate.
+                # The approved final cut is already in storage — never re-generate.
                 video_key = str(resume_context["video_key"])
                 video_bytes = storage.get_bytes(video_key)
                 video_duration = float(resume_context.get("duration_seconds") or 0.0)
@@ -376,40 +478,134 @@ async def run_job_pipeline(
                 thumbnail_url = resume_context.get("thumbnail_url")
                 result_url = None
             else:
-                video_started = utc_now()
-                _progress(db, job, 70, "composing")
-                try:
-                    video = await provider.generate_video(storyboard, job.aspect, job.style)
-                except Exception as exc:
-                    _fail(db, job, f"native video generation failed: {exc}")
-                    return
+                parts: list[tuple[bytes, str, float]] = []
+                for record in chunks_payload:
+                    if _cancelled(db, job, should_stop):
+                        return
+                    chunk_scenes = _chunk_scenes(storyboard, record)
+                    if not chunk_scenes:
+                        continue
+                    raw = _stored_bytes(storage, record.get("key"))
+                    if raw is None:
+                        chunk_started = utc_now()
+                        _progress(db, job, 70, "composing")
+                        chunk = plan_chunks(chunk_scenes, native=True)[0]
+                        try:
+                            video = await provider.generate_video(
+                                chunk.as_storyboard(f"{storyboard.title} — part {chunk.index + 1}"),
+                                job.aspect,
+                                job.style,
+                            )
+                        except Exception as exc:
+                            _fail(db, job, f"native video generation failed: {exc}")
+                            return
+                        if _cancelled(db, job, should_stop):
+                            return
+                        raw = video.video_bytes
+                        extension = video.extension
+                        content_type = video.content_type
+                        duration = video.duration_seconds
+                        storage.store_bytes(str(record["key"]), raw, content_type)
+                        record.update(
+                            status="done",
+                            extension=extension,
+                            content_type=content_type,
+                            duration_seconds=duration,
+                        )
+                        # Mark before proofing: a crash between them must never
+                        # double-count the same credits on the next restart.
+                        record["proofed"] = True
+                        _save_storyboard(db, job, storyboard, scenes_payload, chunks_payload)
+                        _proof(
+                            db,
+                            job,
+                            stage="video",
+                            started_at=chunk_started,
+                            inputs={
+                                "chunk": record["index"],
+                                "scene_start": record["scene_start"],
+                                "scene_end": record["scene_end"],
+                                "aspect": job.aspect,
+                            },
+                            outputs={
+                                "duration_seconds": duration,
+                                "video_size_bytes": len(raw),
+                            },
+                            verification={"allowed": True, "checker": "provider"},
+                            cost={
+                                "credits": _chunk_credits(
+                                    job.credits_charged, record["index"], len(chunks_payload)
+                                ),
+                                "basis": "scene_generation",
+                            },
+                        )
+                    else:
+                        extension = str(record.get("extension") or "mp4")
+                        content_type = str(record.get("content_type") or "video/mp4")
+                        duration = float(record.get("duration_seconds") or 0.0)
+                        record["status"] = "done"
+                        if not record.get("proofed"):
+                            record["proofed"] = True
+                            _save_storyboard(db, job, storyboard, scenes_payload, chunks_payload)
+                            _proof(
+                                db,
+                                job,
+                                stage="video",
+                                started_at=utc_now(),
+                                inputs={"chunk": record["index"], "resumed": True},
+                                outputs={"video_size_bytes": len(raw)},
+                                verification={"allowed": True, "checker": "provider"},
+                                cost={
+                                    "credits": _chunk_credits(
+                                        job.credits_charged, record["index"], len(chunks_payload)
+                                    ),
+                                    "basis": "scene_generation",
+                                },
+                            )
+                    parts.append((raw, extension, duration))
+
+                concat_started = utc_now()
+                if len(parts) == 1:
+                    # A single chunk is already the final video; avoid a needless
+                    # ffmpeg pass (and keep vendor bytes bit-for-bit intact).
+                    raw, extension, duration = parts[0]
+                    final = ComposeResult(
+                        video_bytes=raw,
+                        thumbnail_bytes=None,
+                        duration_seconds=duration,
+                        width=0,
+                        height=0,
+                    )
+                    method = "single-chunk"
+                else:
+                    try:
+                        final = await asyncio.to_thread(concat_videos, parts, job.aspect)
+                    except ComposerError as exc:
+                        _fail(db, job, f"video concatenation failed: {exc}")
+                        return
+                    method = "concat-demuxer"
                 if _cancelled(db, job, should_stop):
                     return
                 _proof(
                     db,
                     job,
-                    stage="video",
-                    started_at=video_started,
-                    inputs={"aspect": job.aspect, "style": job.style},
-                    outputs={
-                        "duration_seconds": video.duration_seconds,
-                        "video_size_bytes": len(video.video_bytes),
-                    },
-                    verification={"allowed": True, "checker": "provider"},
-                    cost={
-                        "credits": job.credits_charged,
-                        "basis": "scene_generation",
-                    },
+                    stage="compose",
+                    started_at=concat_started,
+                    inputs={"chunks": len(parts), "method": method},
+                    outputs={"duration_seconds": final.duration_seconds},
+                    verification={"allowed": True, "checker": "concat"},
                 )
-                video_bytes = video.video_bytes
-                video_duration = video.duration_seconds
-                video_extension = video.extension
-                video_content_type = video.content_type
+                video_bytes = final.video_bytes
+                video_duration = final.duration_seconds
+                video_extension = parts[0][1] if parts else "mp4"
+                video_content_type = (
+                    "video/webm" if video_extension == "webm" else "video/mp4"
+                )
                 result_url = None
                 thumbnail_url = None
                 if job.require_approvals:
                     # Store a reviewable preview BEFORE the gate. On resume the
-                    # same keys are read back instead of calling the vendor again.
+                    # same key is read back instead of calling the vendor again.
                     video_key = f"jobs/{job.id}/video.{video_extension}"
                     result_url = storage.store_bytes(video_key, video_bytes, video_content_type)
                     try:
@@ -430,6 +626,7 @@ async def run_job_pipeline(
                             "video_url": result_url,
                             "thumbnail_url": thumbnail_url,
                             "duration_seconds": video_duration,
+                            "chunks": len(chunks_payload),
                         },
                         resume={
                             "video_key": video_key,
@@ -510,82 +707,160 @@ async def run_job_pipeline(
             )
             return
 
-        if resume_from == "assets":
-            frame_keys = [str(key) for key in resume_context["frame_keys"]]
-            durations = [float(value) for value in resume_context["durations"]]
-            frames = [
-                (storage.get_bytes(key), duration)
-                for key, duration in zip(frame_keys, durations, strict=True)
-            ]
+        chunk_parts: list[tuple[bytes, str, float]] = []
+        legacy_frames: list[tuple[bytes, float]] | None = None
+        single_thumbnail: bytes | None = None
+        if resume_from == "assets" and resume_context.get("chunk_keys"):
+            keys = [str(key) for key in resume_context["chunk_keys"]]
+            durations = [float(value) for value in resume_context.get("chunk_durations", [])]
+            for key, duration in zip(keys, durations, strict=True):
+                raw = _stored_bytes(storage, key)
+                if raw is None:
+                    _fail(db, job, f"committed chunk is missing: {key}")
+                    return
+                chunk_parts.append((raw, "mp4", duration))
         else:
-            keyframes_started = utc_now()
-            _progress(db, job, 40, "keyframes")
-
-            # ---- 3b) keyframe path (stored for the gallery) ----
-            frames: list[tuple[bytes, float]] = []
-            frame_keys: list[str] = []
-            try:
-                for scene in storyboard.scenes:
+            if resume_from == "assets":
+                # Legacy approval record from before chunking: keep it working.
+                frame_keys = [str(key) for key in resume_context["frame_keys"]]
+                durations = [float(value) for value in resume_context["durations"]]
+                legacy_frames = [
+                    (storage.get_bytes(key), duration)
+                    for key, duration in zip(frame_keys, durations, strict=True)
+                ]
+            else:
+                # ---- 3b) keyframe path, rendered one bounded chunk at a time ----
+                for record in chunks_payload:
                     if _cancelled(db, job, should_stop):  # stop spending money
                         return
-                    keyframe = await provider.generate_keyframe(scene.image_prompt, job.aspect)
-                    key = f"jobs/{job.id}/scene_{scene.index}.{keyframe.extension}"
-                    scenes_payload[scene.index - 1]["image_url"] = storage.store_bytes(
-                        key, keyframe.image_bytes, keyframe.content_type
-                    )
-                    frame_keys.append(key)
-                    frames.append((keyframe.image_bytes, scene.duration_seconds))
-            except Exception as exc:
-                _fail(db, job, f"keyframe generation failed: {exc}")
-                return
-            # deepcopy: the nested payload was mutated in place, and SQLAlchemy
-            # only flushes a JSON column when the new value differs structurally
-            # from the committed one (shared nested objects would compare equal).
-            job.storyboard = copy.deepcopy({"title": storyboard.title, "scenes": scenes_payload})
-            db.commit()
-            _proof(
-                db,
-                job,
-                stage="keyframes",
-                started_at=keyframes_started,
-                inputs={"aspect": job.aspect, "scenes": job.num_scenes},
-                outputs={"keyframes_stored": len(frames)},
-                verification={"allowed": True, "checker": "provider"},
-                cost={
-                    "credits": job.credits_charged,
-                    "basis": "scene_generation",
-                },
-            )
-            if job.require_approvals:
-                if not _hold(
-                    db,
-                    job,
-                    "assets",
-                    review={
-                        "kind": "images",
-                        "scenes": [
-                            {
-                                "index": scene.get("index"),
-                                "description": scene.get("description"),
-                                "image_url": scene.get("image_url"),
-                            }
-                            for scene in scenes_payload
-                        ],
-                    },
-                    resume={
-                        "frame_keys": frame_keys,
-                        "durations": [duration for _, duration in frames],
-                    },
-                ):
+                    chunk_scenes = _chunk_scenes(storyboard, record)
+                    if not chunk_scenes:
+                        continue
+                    chunk_started = utc_now()
+                    _progress(db, job, 40, "keyframes")
+                    frames: list[tuple[bytes, float]] = []
+                    for scene in chunk_scenes:
+                        position = scene.index - 1
+                        existing_key = (
+                            scenes_payload[position].get("image_url")
+                            if 0 <= position < len(scenes_payload)
+                            else None
+                        )
+                        image_bytes = _stored_bytes(storage, existing_key)
+                        if image_bytes is None:
+                            keyframe = await provider.generate_keyframe(
+                                scene.image_prompt, job.aspect
+                            )
+                            key = f"jobs/{job.id}/scene_{scene.index}.{keyframe.extension}"
+                            scenes_payload[position]["image_url"] = storage.store_bytes(
+                                key, keyframe.image_bytes, keyframe.content_type
+                            )
+                            image_bytes = keyframe.image_bytes
+                        frames.append((image_bytes, scene.duration_seconds))
+                    if _cancelled(db, job, should_stop):
+                        return
+
+                    chunk_bytes = _stored_bytes(storage, record.get("key"))
+                    if chunk_bytes is None:
+                        try:
+                            composed = await asyncio.to_thread(compose_video, frames, job.aspect)
+                        except ComposerError as exc:
+                            _fail(db, job, f"chunk composition failed: {exc}")
+                            return
+                        chunk_bytes = composed.video_bytes
+                        chunk_duration = composed.duration_seconds
+                        single_thumbnail = composed.thumbnail_bytes
+                        storage.store_bytes(str(record["key"]), chunk_bytes, "video/mp4")
+                        record.update(
+                            status="done",
+                            extension="mp4",
+                            content_type="video/mp4",
+                            duration_seconds=chunk_duration,
+                        )
+                    else:
+                        chunk_duration = float(record.get("duration_seconds") or 0.0)
+                        record["status"] = "done"
+
+                    if not record.get("proofed"):
+                        record["proofed"] = True
+                        _save_storyboard(db, job, storyboard, scenes_payload, chunks_payload)
+                        _proof(
+                            db,
+                            job,
+                            stage="keyframes",
+                            started_at=chunk_started,
+                            inputs={
+                                "chunk": record["index"],
+                                "scene_start": record["scene_start"],
+                                "scene_end": record["scene_end"],
+                                "aspect": job.aspect,
+                            },
+                            outputs={"keyframes_stored": len(frames)},
+                            verification={"allowed": True, "checker": "provider"},
+                            cost={
+                                "credits": _chunk_credits(
+                                    job.credits_charged, record["index"], len(chunks_payload)
+                                ),
+                                "basis": "scene_generation",
+                            },
+                        )
+                    _save_storyboard(db, job, storyboard, scenes_payload, chunks_payload)
+                    chunk_parts.append((chunk_bytes, "mp4", chunk_duration))
+
+                if job.require_approvals:
+                    if not _hold(
+                        db,
+                        job,
+                        "assets",
+                        review={
+                            "kind": "images",
+                            "scenes": [
+                                {
+                                    "index": scene.get("index"),
+                                    "description": scene.get("description"),
+                                    "image_url": scene.get("image_url"),
+                                }
+                                for scene in scenes_payload
+                            ],
+                        },
+                        resume={
+                            "frame_keys": [
+                                str(scene.get("image_url")) for scene in scenes_payload
+                            ],
+                            "durations": [scene.duration_seconds for scene in storyboard.scenes],
+                            "chunk_keys": [str(record["key"]) for record in chunks_payload],
+                            "chunk_durations": [
+                                float(record.get("duration_seconds") or 0.0)
+                                for record in chunks_payload
+                            ],
+                        },
+                    ):
+                        return
                     return
-                return
 
         compose_started = utc_now()
         _progress(db, job, 70, "composing")
 
-        # ---- 4) compose real MP4 (CPU-bound -> thread) ----
+        # ---- 4) final assembly (CPU-bound -> thread) ----
+        method = "xfade"
         try:
-            result = await asyncio.to_thread(compose_video, frames, job.aspect)
+            if len(chunk_parts) == 1:
+                raw, _extension, duration = chunk_parts[0]
+                final = ComposeResult(
+                    video_bytes=raw,
+                    thumbnail_bytes=single_thumbnail,
+                    duration_seconds=duration,
+                    width=0,
+                    height=0,
+                )
+                method = "single-chunk"
+            elif chunk_parts:
+                final = await asyncio.to_thread(concat_videos, chunk_parts, job.aspect)
+                method = "concat-demuxer"
+            elif legacy_frames is not None:
+                final = await asyncio.to_thread(compose_video, legacy_frames, job.aspect)
+            else:
+                raise ComposerError("no frames or chunks available for composition")
         except ComposerError as exc:
             _fail(db, job, f"composition failed: {exc}")
             return
@@ -596,10 +871,15 @@ async def run_job_pipeline(
             job,
             stage="compose",
             started_at=compose_started,
-            inputs={"aspect": job.aspect, "frames": len(frames)},
-            outputs={"duration_seconds": result.duration_seconds},
+            inputs={
+                "aspect": job.aspect,
+                "chunks": len(chunk_parts),
+                "method": method,
+            },
+            outputs={"duration_seconds": final.duration_seconds},
             verification={"allowed": True, "checker": "compose"},
         )
+        result = final
 
         # ---- 5) post-generation safety + store artifacts ----
         artifact_started = utc_now()
@@ -639,7 +919,11 @@ async def run_job_pipeline(
                 f"jobs/{job.id}/thumb.jpg", result.thumbnail_bytes, "image/jpeg"
             )
         storyboard_payload = copy.deepcopy(
-            {"title": storyboard.title, "scenes": scenes_payload}
+            {
+                "title": storyboard.title,
+                "scenes": scenes_payload,
+                "chunks": chunks_payload,
+            }
         )
         if not job_state.complete(
             db,

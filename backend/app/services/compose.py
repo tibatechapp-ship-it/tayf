@@ -218,3 +218,76 @@ def compose_video(frames: list[tuple[bytes, float]], aspect: str) -> ComposeResu
             width=width,
             height=height,
         )
+
+
+def _safe_extension(extension: str) -> str:
+    """Only a short alphanumeric container suffix reaches the filesystem."""
+    cleaned = "".join(ch for ch in str(extension).lower() if ch.isalnum())
+    return cleaned[:8] or "mp4"
+
+
+def concat_videos(parts: list[tuple[bytes, str, float]], aspect: str) -> ComposeResult:
+    """Join already-rendered chunks with ffmpeg's concat demuxer.
+
+    ``parts`` holds ``(video_bytes, container_extension, duration_seconds)`` in
+    playback order. Unlike the single-shot xfade graph, this keeps memory and
+    filter complexity bounded for long videos: each chunk was rendered on its
+    own and the final join is a stream copy whenever chunk parameters match.
+    """
+    if not parts:
+        raise ComposerError("no chunks to concatenate")
+    ffmpeg = _resolve_binary("ffmpeg")
+    if not ffmpeg:
+        raise ComposerError("ffmpeg not found (system or imageio-ffmpeg)")
+    ffprobe = _resolve_binary("ffprobe")
+    width, height = ASPECT_DIMS.get(aspect, ASPECT_DIMS["16:9"])
+
+    with tempfile.TemporaryDirectory(prefix="vf_concat_") as tmp:
+        work = Path(tmp)
+        paths: list[Path] = []
+        for index, (data, extension, _duration) in enumerate(parts):
+            path = work / f"chunk_{index:03d}.{_safe_extension(extension)}"
+            path.write_bytes(data)
+            paths.append(path)
+
+        listing = work / "chunks.txt"
+        listing.write_text(
+            "".join(f"file '{path}'\n" for path in paths), encoding="utf-8"
+        )
+        final = work / f"final.{_safe_extension(parts[0][1])}"
+        base = [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(listing)]
+        try:
+            _run([*base, "-c", "copy", str(final)])
+        except ComposerError:
+            # Chunks with slightly different encoder settings still need one
+            # re-encode pass; this is the bounded fallback, not the normal path.
+            _run([
+                *base, "-c:v", "libx264", "-preset", "veryfast",
+                "-crf", "20", "-c:a", "copy", str(final),
+            ])
+
+        if not final.is_file() or final.stat().st_size == 0:
+            raise ComposerError("concat produced an empty file")
+        measured = _probe_duration(ffprobe, final)
+        if measured is None:
+            measured = sum(duration for _, _, duration in parts)
+
+        thumbnail_bytes: bytes | None = None
+        try:
+            thumb = work / "thumb.jpg"
+            _run([
+                ffmpeg, "-y", "-i", str(final), "-ss", "0.1",
+                "-frames:v", "1", "-q:v", "4", str(thumb),
+            ])
+            if thumb.is_file() and thumb.stat().st_size > 0:
+                thumbnail_bytes = thumb.read_bytes()
+        except ComposerError:
+            thumbnail_bytes = None
+
+        return ComposeResult(
+            video_bytes=final.read_bytes(),
+            thumbnail_bytes=thumbnail_bytes,
+            duration_seconds=round(float(measured), 2),
+            width=width,
+            height=height,
+        )

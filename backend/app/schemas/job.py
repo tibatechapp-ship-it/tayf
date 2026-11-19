@@ -14,7 +14,7 @@ STYLES = ["cinematic", "anime", "3d_render", "watercolor", "photorealistic", "no
 
 class JobCreateIn(BaseModel):
     prompt: str = Field(min_length=1, max_length=2000)
-    num_scenes: int = Field(default=4, ge=2, le=8)
+    num_scenes: int = Field(default=4, ge=2, le=24)
     aspect: str = Field(default="16:9")
     style: str = Field(default="cinematic", max_length=40)
     require_approvals: bool = False

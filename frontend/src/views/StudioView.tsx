@@ -879,7 +879,7 @@ export default function StudioView({
                     <input
                       type="number"
                       min={2}
-                      max={8}
+                      max={24}
                       value={numScenes}
                       onChange={(e) => setNumScenes(Number(e.target.value))}
                     />

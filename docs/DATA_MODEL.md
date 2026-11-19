@@ -47,7 +47,7 @@ The durable record of the full pipeline; every pipeline step commits progress.
 | `id` | UUID | PK |
 | `project_id` | UUID | FK → `projects.id`, **ON DELETE CASCADE** |
 | `prompt` | text | the user's request (safety-screened pre-insert) |
-| `num_scenes` | integer | 2–8, cost = `num_scenes × CREDIT_PER_SCENE` |
+| `num_scenes` | integer | 2–24, cost = `num_scenes × CREDIT_PER_SCENE` |
 | `aspect` | varchar(10) | `16:9 \| 9:16 \| 1:1` |
 | `style` | varchar(40) | e.g. `cinematic`, `anime` |
 | `input_params` | JSON | provider extras (audit trail) |
@@ -58,7 +58,7 @@ The durable record of the full pipeline; every pipeline step commits progress.
 | `error_message` | text | set when a job fails (credits are refunded) |
 | `rejection_reason` | text | set by the safety pre-filter (never charged) |
 | `safety_category` | varchar(40) | `empty` \| `too_long` \| `blocked_term` \| `empty_artifact` |
-| `storyboard` | JSON | `{title, scenes:[{index, description, image_prompt, duration_seconds, image_url}]}` |
+| `storyboard` | JSON | `{title, scenes:[...], chunks:[{index, key, status, scene_start, scene_end, duration_seconds}]}` — chunk records allow resume without re-generating finished parts |
 | `result_url` | varchar(1024) | MP4 URL on completion (wire name: `output_url`) |
 | `thumbnail_url` | varchar(1024) | JPEG thumbnail |
 | `video_size_bytes` | integer | artifact size |

@@ -975,6 +975,12 @@ button.primary:hover:not(:disabled) {
   font-size: 0.78rem;
 }
 
+/* arabic nlp badge */
+.arabic-badge {
+  display: inline-block;
+  margin-top: 0.25rem;
+}
+
 /* pro export */
 .export-panel {
   margin-top: 0.9rem;

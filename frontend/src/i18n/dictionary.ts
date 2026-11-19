@@ -76,6 +76,7 @@ export interface Copy {
   stageQueued: string;
   stageProcessing: string;
   stageStoryboard: string;
+  stageArabic: string;
   stageSafety: string;
   stageKeyframes: string;
   stageComposing: string;
@@ -119,6 +120,7 @@ export interface Copy {
   exportStills: string;
   exportBusy: string;
   exportErrorPrefix: string;
+  arabicReady: string;
 
   // cost dashboard
   costTitle: string;
@@ -240,6 +242,7 @@ export const copy: Record<Lang, Copy> = {
     stageQueued: "في الانتظار",
     stageProcessing: "قيد التنفيذ",
     stageStoryboard: "اللوحة القصصية",
+    stageArabic: "التطبيع العربي",
     stageSafety: "فحص المحتوى",
     stageKeyframes: "الإطارات المفتاحية",
     stageComposing: "تجميع الفيديو",
@@ -280,6 +283,7 @@ export const copy: Record<Lang, Copy> = {
     exportStills: "صور المشاهد",
     exportBusy: "جارٍ التصدير…",
     exportErrorPrefix: "فشل التصدير: ",
+    arabicReady: "نص عربي مُطبَّع",
 
     costTitle: "لوحة التكاليف",
     costHint: "الرصيد هو وحدة الدفع؛ الأرقام من دفتر الرصيد وإثبات المراحل.",
@@ -398,6 +402,7 @@ export const copy: Record<Lang, Copy> = {
     stageQueued: "Queued",
     stageProcessing: "Starting",
     stageStoryboard: "Storyboard",
+    stageArabic: "Arabic normalization",
     stageSafety: "Safety check",
     stageKeyframes: "Keyframes",
     stageComposing: "Composing video",
@@ -438,6 +443,7 @@ export const copy: Record<Lang, Copy> = {
     exportStills: "Scene stills",
     exportBusy: "Exporting…",
     exportErrorPrefix: "Export failed: ",
+    arabicReady: "Arabic normalized",
 
     costTitle: "Cost dashboard",
     costHint: "Credits are the settlement unit; figures come from the ledger and stage proof.",

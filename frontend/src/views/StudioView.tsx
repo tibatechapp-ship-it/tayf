@@ -50,6 +50,8 @@ export default function StudioView({
   onLangSwitch,
 }: Props) {
   const t = copy[lang];
+  const hasArabic = (value: string) =>
+    /[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]/.test(value);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -429,6 +431,7 @@ export default function StudioView({
 
   function proofStageLabel(stage: string): string {
     const extra: Record<string, string> = {
+      arabic_nlp: t.stageArabic,
       safety_text: t.stageSafety,
       safety_artifact: t.stageSafety,
       video: t.stageComposing,
@@ -856,6 +859,11 @@ export default function StudioView({
                     )}
 
                     <p className="job-prompt">{job.prompt}</p>
+                    {hasArabic(job.prompt) && (
+                      <span className="tag real arabic-badge" data-testid={`arabic-${job.id}`}>
+                        {t.arabicReady}
+                      </span>
+                    )}
 
                     {job.status === "rejected" && job.rejection_reason && (
                       <p className="panel panel-warn">

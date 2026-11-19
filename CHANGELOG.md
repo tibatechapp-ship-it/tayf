@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 
 ### Added
 - Pro export for completed jobs: `GET /api/v1/jobs/{id}/export/srt` (UTF-8-BOM SRT subtitles timed from scene durations), `/export/project` (portable JSON manifest with neutral storage keys, prompt, settings and the proof hash) and `/export/stills` (ZIP of stored keyframes plus a manifest). All three are owner-scoped and add AR/EN studio export buttons. Native T2V jobs have no separate keyframes and export an empty, honestly-labelled stills archive.
+- Arabic NLP depth (batch 1): deterministic prompt/storyboard normalization (alef variants, tatweel, Arabic-Indic digits, Arabic punctuation), a code-mixing audit and Arabic rules in the shared storyboard system prompt. Every change is recorded as an `arabic_nlp` proof event; the original prompt is untouched. No migration, no invented grammar fixes and no simulated TTS.
 
 ## [0.7.0] — 2026-11-19
 

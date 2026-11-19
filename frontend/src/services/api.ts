@@ -520,6 +520,21 @@ export function subscribeJobEvents(
     }
   });
   source.addEventListener("done", () => source.close());
+  source.addEventListener("error", (message) => {
+    // The server also emits a named `event: error` for job-disappearance and
+    // stream-timeout cases. Transport failures arrive as a plain Event and are
+    // handled by onerror below, so only MessageEvent carries a server detail.
+    if (!(message instanceof MessageEvent) || !message.data) return;
+    let detail = "تعذر متابعة البث";
+    try {
+      const payload = JSON.parse(message.data) as { detail?: string };
+      if (payload.detail) detail = payload.detail;
+    } catch {
+      /* keep the generic Arabic message when the payload is malformed */
+    }
+    source.close();
+    onError?.(new Error(detail));
+  });
   source.onerror = () => {
     source.close();
     onError?.(new Error("انقطع بث التقدم - سيستمر التحديث الدوري"));

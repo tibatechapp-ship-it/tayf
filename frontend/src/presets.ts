@@ -115,7 +115,7 @@ function isPreset(value: unknown): value is Preset {
     typeof candidate.numScenes === "number" &&
     Number.isInteger(candidate.numScenes) &&
     candidate.numScenes >= 2 &&
-    candidate.numScenes <= 8 &&
+    candidate.numScenes <= 24 &&
     typeof candidate.aspect === "string" &&
     ASPECT_VALUES.includes(candidate.aspect) &&
     typeof candidate.style === "string" &&

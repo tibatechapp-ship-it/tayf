@@ -72,7 +72,7 @@ class ReplicateT2VProvider(AIProvider):
         )
         prediction = await self._create_prediction(
             self._storyboard_model,
-            {"prompt": user_prompt, "max_tokens": 1200, "temperature": 0.7},
+            {"prompt": user_prompt, "max_tokens": min(4000, 600 + n * 100), "temperature": 0.7},
         )
         output = await self._await_prediction(prediction)
         data = self._extract_json(self._text_to_string(output))

@@ -133,7 +133,27 @@ pipeline in-process, which keeps the suite deterministic.
 - No voice/TTS field exists because Tayf has no audio stage; Arabic presets
   feed the existing Arabic NLP normalization and proof trail.
 
-## 11. Known limits
+## 11. Chunked long video
+
+- `app/services/video_chunks.py` plans contiguous chunks without touching the
+  database: native T2V chunks stay within 15 seconds of clamped scene time and
+  keyframe chunks stay within the proven 8-scene ffmpeg graph size.
+- Each rendered chunk is stored under `jobs/{id}/chunks/chunk_NNN.mp4`. The
+  neutral key, scene range, duration, status and proof flag are committed in
+  the existing `generation_jobs.storyboard` JSON, so a restarted worker reuses
+  finished chunks instead of calling the provider again.
+- Final assembly uses ffmpeg's concat demuxer (`-c copy` with a bounded
+  re-encode fallback). A single chunk is used as-is, preserving vendor bytes.
+- Scene credits are split across chunk-level `video`/`keyframes` proof events
+  with a `proofed` flag that prevents double attribution on resume; the cost
+  dashboard continues to read the same stage names.
+- Approval gates still pause before assets and after the reviewable cut; their
+  resume records include chunk keys, so approval does not re-render anything.
+- The frontend subscribes to the backend's named SSE `error` event, closes the
+  stream and falls back to the existing 4-second poll instead of silently
+  waiting for a timeout.
+
+## 12. Known limits
 
 - The in-process rate limiter is per replica; use an edge limiter for multi-replica deployments.
 - SQLite remains a portable default, not a high-concurrency production database.

@@ -19,7 +19,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core import job_proof
+from app.core import arabic_nlp, job_proof
 from app.core.metrics import record_job_terminal
 from app.core.safety import get_safety_layer
 from app.db.session import SessionLocal
@@ -205,10 +205,34 @@ async def run_job_pipeline(
             storyboard_started = utc_now()
             _progress(db, job, 10, "storyboard")
 
+            # ---- 1a) Arabic prompt normalization (deterministic, no invented fixes) ----
+            nlp_prompt_started = utc_now()
+            provider_prompt = job.prompt
+            if arabic_nlp.has_arabic(job.prompt):
+                normalized_prompt = arabic_nlp.normalize_arabic(job.prompt)
+                provider_prompt = normalized_prompt
+                _proof(
+                    db,
+                    job,
+                    stage="arabic_nlp",
+                    started_at=nlp_prompt_started,
+                    inputs={"field": "prompt", "arabic": True, "length": len(job.prompt)},
+                    outputs={
+                        "normalized": normalized_prompt[:500],
+                        "changed": normalized_prompt != job.prompt,
+                        "code_mix": arabic_nlp.code_mixing_spans(job.prompt)[:20],
+                    },
+                    verification={
+                        "allowed": True,
+                        "checker": "arabic_nlp.rules",
+                        "stage": "pre_storyboard",
+                    },
+                )
+
             # ---- 1) storyboard (real or simulated by provider) ----
             try:
                 storyboard = await provider.generate_storyboard(
-                    job.prompt, job.num_scenes, job.style
+                    provider_prompt, job.num_scenes, job.style
                 )
             except Exception as exc:
                 _fail(db, job, f"storyboard failed: {exc}")
@@ -220,10 +244,59 @@ async def run_job_pipeline(
                 job,
                 stage="storyboard",
                 started_at=storyboard_started,
-                inputs={"prompt": job.prompt, "num_scenes": job.num_scenes, "style": job.style},
+                inputs={
+                    "prompt": provider_prompt,
+                    "num_scenes": job.num_scenes,
+                    "style": job.style,
+                },
                 outputs={"title": storyboard.title, "scene_count": len(storyboard.scenes)},
                 verification={"allowed": True, "checker": "provider"},
             )
+
+            # ---- 1b) normalize Arabic text produced by the provider ----
+            nlp_scene_started = utc_now()
+            ar_title = storyboard.title
+            ar_scenes = list(storyboard.scenes)
+            normalized_fields = 0
+            if arabic_nlp.has_arabic(ar_title):
+                ar_title = arabic_nlp.normalize_arabic(ar_title)
+                normalized_fields += 1
+            rebuilt_scenes: list[Scene] = []
+            for scene in ar_scenes:
+                description = scene.description
+                image_prompt = scene.image_prompt
+                if arabic_nlp.has_arabic(description):
+                    description = arabic_nlp.normalize_arabic(description)
+                    normalized_fields += 1
+                if arabic_nlp.has_arabic(image_prompt):
+                    image_prompt = arabic_nlp.normalize_arabic(image_prompt)
+                    normalized_fields += 1
+                rebuilt_scenes.append(
+                    Scene(
+                        index=scene.index,
+                        description=description,
+                        image_prompt=image_prompt,
+                        duration_seconds=scene.duration_seconds,
+                    )
+                )
+            if normalized_fields:
+                storyboard = Storyboard(title=ar_title, scenes=rebuilt_scenes)
+                _proof(
+                    db,
+                    job,
+                    stage="arabic_nlp",
+                    started_at=nlp_scene_started,
+                    inputs={"field": "storyboard", "scenes": len(ar_scenes)},
+                    outputs={
+                        "fields_normalized": normalized_fields,
+                        "title": ar_title[:200],
+                    },
+                    verification={
+                        "allowed": True,
+                        "checker": "arabic_nlp.rules",
+                        "stage": "post_storyboard",
+                    },
+                )
 
             # ---- 2) safety screen the AI-produced text as well ----
             safety_started = utc_now()

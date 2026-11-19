@@ -10,6 +10,7 @@ import base64
 
 import httpx
 
+from app.core.arabic_nlp import augment_storyboard_system
 from app.core.config import settings
 from app.services.ai.base import (
     ASPECT_TO_SIZE,
@@ -19,6 +20,7 @@ from app.services.ai.base import (
     Scene,
     Storyboard,
 )
+
 
 def sniff_image_format(raw: bytes) -> tuple[str, str]:
     """Return (extension, content_type) from the actual magic bytes.
@@ -37,7 +39,7 @@ def sniff_image_format(raw: bytes) -> tuple[str, str]:
     return "png", "image/png"  # unknown bytes: keep the generic container name
 
 
-_STORYBOARD_SYSTEM = (
+_BASE_STORYBOARD_SYSTEM = (
     "You are a professional video storyboard director. "
     "The user gives you a video concept. Return ONLY a JSON object, no prose, "
     "no markdown fences, with this exact shape:\n"
@@ -48,6 +50,10 @@ _STORYBOARD_SYSTEM = (
     "visually concrete, and include the requested style; duration_seconds between 2 and 8; "
     "output valid JSON only."
 )
+
+# OpenAI-compatible provider imports this symbol too, so one edit covers both
+# real LLM paths. Mock provider needs no prompt.
+_STORYBOARD_SYSTEM = augment_storyboard_system(_BASE_STORYBOARD_SYSTEM)
 
 
 class ZaiGatewayProvider(AIProvider):

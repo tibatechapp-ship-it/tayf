@@ -105,7 +105,22 @@ pipeline in-process, which keeps the suite deterministic.
 - Native T2V jobs produce an empty, honestly-labelled stills ZIP because they
   do not generate separate keyframe images.
 
-## 9. Known limits
+## 9. Arabic NLP depth
+
+- `app/core/arabic_nlp.py` is deterministic and dependency-free: it folds
+  equivalent Unicode forms (alef variants, tatweel, Arabic-Indic digits,
+  Arabic punctuation), records code-mixing spans and augments the shared
+  storyboard system prompt with Arabic rules.
+- `GenerationJob.prompt` is never rewritten. Normalized text is a derived
+  input passed to the provider and stored in the `arabic_nlp` proof events
+  before and after storyboard generation.
+- Diacritics and teh-marbuta are preserved. The module does not invent grammar
+  fixes, diacritics or facts; "normalized" means canonical form, not corrected
+  meaning.
+- The product still has no TTS/voiceover stage. Future voice work can consume
+  the normalized storyboard text, but no audio is claimed today.
+
+## 10. Known limits
 
 - The in-process rate limiter is per replica; use an edge limiter for multi-replica deployments.
 - SQLite remains a portable default, not a high-concurrency production database.

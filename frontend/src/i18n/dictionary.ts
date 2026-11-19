@@ -112,6 +112,14 @@ export interface Copy {
   approvalBusy: string;
   approvalRejected: string;
 
+  // pro export
+  exportTitle: string;
+  exportSrt: string;
+  exportProject: string;
+  exportStills: string;
+  exportBusy: string;
+  exportErrorPrefix: string;
+
   // cost dashboard
   costTitle: string;
   costHint: string;
@@ -266,6 +274,13 @@ export const copy: Record<Lang, Copy> = {
     approvalBusy: "جارٍ الإرسال…",
     approvalRejected: "تم رفض المرحلة",
 
+    exportTitle: "التصدير الاحترافي",
+    exportSrt: "ترجمة SRT",
+    exportProject: "ملف المشروع",
+    exportStills: "صور المشاهد",
+    exportBusy: "جارٍ التصدير…",
+    exportErrorPrefix: "فشل التصدير: ",
+
     costTitle: "لوحة التكاليف",
     costHint: "الرصيد هو وحدة الدفع؛ الأرقام من دفتر الرصيد وإثبات المراحل.",
     costCharged: "المدفوع",
@@ -416,6 +431,13 @@ export const copy: Record<Lang, Copy> = {
     approvalReject: "Reject and cancel job",
     approvalBusy: "Sending…",
     approvalRejected: "Stage rejected",
+
+    exportTitle: "Pro export",
+    exportSrt: "SRT subtitles",
+    exportProject: "Project file",
+    exportStills: "Scene stills",
+    exportBusy: "Exporting…",
+    exportErrorPrefix: "Export failed: ",
 
     costTitle: "Cost dashboard",
     costHint: "Credits are the settlement unit; figures come from the ledger and stage proof.",

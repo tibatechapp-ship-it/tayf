@@ -454,6 +454,43 @@ export function fetchJobProof(token: string, jobId: string): Promise<JobProof> {
   return request<JobProof>(`/jobs/${jobId}/proof`, { token });
 }
 
+export type ExportKind = "srt" | "project" | "stills";
+
+/**
+ * Pro export returns a binary attachment, so it cannot go through the JSON
+ * `request` helper. Keep the same auth + silent-refresh contract and return a
+ * Blob; the caller triggers the browser download.
+ */
+export async function exportJobFile(
+  token: string,
+  jobId: string,
+  kind: ExportKind,
+): Promise<Blob> {
+  const path = `${API}/jobs/${jobId}/export/${kind}`;
+  const fetchBlob = (auth: string): Promise<Response> =>
+    fetch(path, {
+      headers: { Authorization: `Bearer ${auth}` },
+      credentials: "include",
+    });
+
+  let response = await fetchBlob(token);
+  if (response.status === 401) {
+    const renewed = await tryRefresh();
+    if (renewed) response = await fetchBlob(renewed);
+  }
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body.detail === "string") detail = body.detail;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(detail);
+  }
+  return response.blob();
+}
+
 export function cancelJob(token: string, jobId: string): Promise<Job> {
   return request<Job>(`/jobs/${jobId}/cancel`, { method: "POST", token });
 }

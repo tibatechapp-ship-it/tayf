@@ -94,7 +94,18 @@ pipeline in-process, which keeps the suite deterministic.
 - `/metrics` exposes aggregate counters only.
 - Every response carries security headers and an `X-Request-ID`.
 
-## 8. Known limits
+## 8. Pro export
+
+- SRT, project manifest and stills are derived only from stored job data — no
+  fabricated captions, metadata or keyframes.
+- All export routes are owner-scoped through `Project.user_id` (404 for anyone
+  else, no existence oracle) and require authentication.
+- The project manifest stores neutral object keys, never signed URLs; scene
+  timings come from the storyboard's `duration_seconds`.
+- Native T2V jobs produce an empty, honestly-labelled stills ZIP because they
+  do not generate separate keyframe images.
+
+## 9. Known limits
 
 - The in-process rate limiter is per replica; use an edge limiter for multi-replica deployments.
 - SQLite remains a portable default, not a high-concurrency production database.

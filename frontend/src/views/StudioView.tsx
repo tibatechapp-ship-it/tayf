@@ -7,6 +7,8 @@ import {
   decideJobApproval,
   createProject,
   createTopUpCheckout,
+  exportJobFile,
+  type ExportKind,
   fetchCostReport,
   fetchCredits,
   fetchJob,
@@ -87,6 +89,8 @@ export default function StudioView({
   const [costReport, setCostReport] = useState<CostReport | null>(null);
   const [costLoading, setCostLoading] = useState(false);
   const [costError, setCostError] = useState<string | null>(null);
+  const [exportBusyId, setExportBusyId] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const token = getToken() ?? "";
   const pollTimer = useRef<number | null>(null);
@@ -355,6 +359,28 @@ export default function StudioView({
       setProofError(err instanceof Error ? err.message : String(err));
     } finally {
       setProofLoadingId(null);
+    }
+  }
+
+  async function handleExport(jobId: string, kind: ExportKind) {
+    if (exportBusyId) return;
+    setExportBusyId(`${jobId}:${kind}`);
+    setExportError(null);
+    try {
+      const blob = await exportJobFile(token, jobId, kind);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      const ext = kind === "project" ? "json" : kind === "stills" ? "zip" : "srt";
+      anchor.download = `tayf-${jobId}.${ext}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(t.exportErrorPrefix + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setExportBusyId(null);
     }
   }
 
@@ -852,6 +878,42 @@ export default function StudioView({
                           {job.duration_seconds ? ` · ${job.duration_seconds}${t.durationSeconds}` : ""}
                         </figcaption>
                       </figure>
+                    )}
+
+                    {job.status === "completed" && (
+                      <section className="export-panel" data-testid={`export-${job.id}`}>
+                        <h4>{t.exportTitle}</h4>
+                        <div className="export-actions">
+                          <button
+                            type="button"
+                            className="ghost"
+                            disabled={exportBusyId !== null}
+                            onClick={() => void handleExport(job.id, "srt")}
+                            data-testid={`export-srt-${job.id}`}
+                          >
+                            {exportBusyId === `${job.id}:srt` ? t.exportBusy : t.exportSrt}
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost"
+                            disabled={exportBusyId !== null}
+                            onClick={() => void handleExport(job.id, "project")}
+                            data-testid={`export-project-${job.id}`}
+                          >
+                            {exportBusyId === `${job.id}:project` ? t.exportBusy : t.exportProject}
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost"
+                            disabled={exportBusyId !== null}
+                            onClick={() => void handleExport(job.id, "stills")}
+                            data-testid={`export-stills-${job.id}`}
+                          >
+                            {exportBusyId === `${job.id}:stills` ? t.exportBusy : t.exportStills}
+                          </button>
+                        </div>
+                        {exportError && <p className="panel panel-error">{exportError}</p>}
+                      </section>
                     )}
 
                     {job.scenes.length > 0 && (

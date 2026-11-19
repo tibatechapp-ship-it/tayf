@@ -14,7 +14,7 @@ from app.core.config import get_settings
 from app.core.metrics import REGISTRY
 
 # Single source of truth for the product version (FastAPI app + /version).
-APP_VERSION = "0.6.0"
+APP_VERSION = "0.7.0"
 
 router = APIRouter(tags=["health"])
 

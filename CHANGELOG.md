@@ -6,6 +6,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-11-19
+
 ### Added
 - Cost dashboard: `GET /api/v1/costs/me` summarizes charged/refunded credits from the append-only ledger, per-stage wall-clock time and provider/model consumption from the verifiable proof trail, and an AR/EN studio panel. Scene credits are attributed to the generation stage (`keyframes` or `video`); legacy jobs that recorded cost on `store` are still supported without a migration.
 - Neutral storage layer: job rows and approval reviews now persist provider-neutral object keys; `GET` serialization mints fresh short-lived URLs for local, MinIO, S3, R2 or any S3-compatible backend through one `signed_url` seam. Legacy stored URLs are still resolved on read, so no data migration is needed. `STORAGE_SIGNED_URL_TTL_SECONDS` controls link lifetime and compose now forwards all storage settings to both API and worker.

@@ -26,6 +26,7 @@ class UserOut(BaseModel):
     email: str
     username: str
     created_at: datetime
+    plan: str = "free"
 
 
 class TokenOut(BaseModel):

@@ -19,7 +19,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core import arabic_nlp, job_proof
+from app.core import arabic_nlp, branding, job_proof
 from app.core.metrics import record_job_terminal
 from app.core.safety import get_safety_layer
 from app.db.session import SessionLocal
@@ -31,6 +31,7 @@ from app.services.ai.factory import get_ai_provider
 from app.services.compose import (
     ComposeResult,
     ComposerError,
+    apply_watermark,
     compose_video,
     concat_videos,
     extract_thumbnail,
@@ -279,6 +280,9 @@ async def run_job_pipeline(
             if job is None:  # already claimed, cancelled, or terminal
                 return
             resume_context = {}
+
+        job_brand = branding.job_branding(job.input_params)
+        should_watermark = bool(job_brand["watermark"])
 
         provider = get_ai_provider()
         storage = get_storage()
@@ -586,18 +590,46 @@ async def run_job_pipeline(
                     method = "concat-demuxer"
                 if _cancelled(db, job, should_stop):
                     return
+                video_extension = parts[0][1] if parts else "mp4"
+                watermark_applied = False
+                if should_watermark:
+                    try:
+                        branded = await asyncio.to_thread(
+                            apply_watermark, final.video_bytes, video_extension
+                        )
+                    except ComposerError as exc:
+                        _fail(db, job, f"branding failed: {exc}")
+                        return
+                    final = ComposeResult(
+                        video_bytes=branded,
+                        thumbnail_bytes=None,
+                        duration_seconds=final.duration_seconds,
+                        width=final.width,
+                        height=final.height,
+                    )
+                    watermark_applied = True
+                    # apply_watermark always emits an MP4 container, even when
+                    # the vendor chunk was WebM; keep the stored key honest.
+                    video_extension = "mp4"
                 _proof(
                     db,
                     job,
                     stage="compose",
                     started_at=concat_started,
-                    inputs={"chunks": len(parts), "method": method},
-                    outputs={"duration_seconds": final.duration_seconds},
+                    inputs={
+                        "chunks": len(parts),
+                        "method": method,
+                        "watermark": should_watermark,
+                        "brand": job_brand["brand"],
+                    },
+                    outputs={
+                        "duration_seconds": final.duration_seconds,
+                        "watermark_applied": watermark_applied,
+                    },
                     verification={"allowed": True, "checker": "concat"},
                 )
                 video_bytes = final.video_bytes
                 video_duration = final.duration_seconds
-                video_extension = parts[0][1] if parts else "mp4"
                 video_content_type = (
                     "video/webm" if video_extension == "webm" else "video/mp4"
                 )
@@ -763,7 +795,9 @@ async def run_job_pipeline(
                     chunk_bytes = _stored_bytes(storage, record.get("key"))
                     if chunk_bytes is None:
                         try:
-                            composed = await asyncio.to_thread(compose_video, frames, job.aspect)
+                            composed = await asyncio.to_thread(
+                                compose_video, frames, job.aspect, watermark=False
+                            )
                         except ComposerError as exc:
                             _fail(db, job, f"chunk composition failed: {exc}")
                             return
@@ -866,6 +900,21 @@ async def run_job_pipeline(
             return
         if _cancelled(db, job, should_stop):  # cancelled while ffmpeg was running
             return
+        watermark_applied = False
+        if should_watermark:
+            try:
+                branded = await asyncio.to_thread(apply_watermark, final.video_bytes, "mp4")
+            except ComposerError as exc:
+                _fail(db, job, f"branding failed: {exc}")
+                return
+            final = ComposeResult(
+                video_bytes=branded,
+                thumbnail_bytes=final.thumbnail_bytes,
+                duration_seconds=final.duration_seconds,
+                width=final.width,
+                height=final.height,
+            )
+            watermark_applied = True
         _proof(
             db,
             job,
@@ -875,8 +924,13 @@ async def run_job_pipeline(
                 "aspect": job.aspect,
                 "chunks": len(chunk_parts),
                 "method": method,
+                "watermark": should_watermark,
+                "brand": job_brand["brand"],
             },
-            outputs={"duration_seconds": final.duration_seconds},
+            outputs={
+                "duration_seconds": final.duration_seconds,
+                "watermark_applied": watermark_applied,
+            },
             verification={"allowed": True, "checker": "compose"},
         )
         result = final

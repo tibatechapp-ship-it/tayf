@@ -1,6 +1,6 @@
-# Tayf Studio Engineering
+# Al-Manazir Engineering
 
-Tayf is an Arabic-first AI video generation platform: FastAPI + React/TypeScript,
+Al-Manazir is an Arabic-first AI video generation platform: FastAPI + React/TypeScript,
 portable SQLite by default, and a provider seam that distinguishes honest
 simulation from real vendor output.
 

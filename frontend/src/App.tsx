@@ -25,6 +25,7 @@ export default function App() {
 
   const [ready, setReady] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
+  const [plan, setPlan] = useState("free");
   const [balance, setBalance] = useState(0);
   const [version, setVersion] = useState<string | null>(null);
 
@@ -41,6 +42,7 @@ export default function App() {
       .then((data) => {
         setToken(data.access_token);
         setUsername(data.user.username);
+        setPlan(data.user.plan ?? "free");
         setBalance(data.balance);
       })
       .catch(() => setToken(null))
@@ -49,6 +51,7 @@ export default function App() {
 
   function handleAuthenticated(data: TokenResponse) {
     setUsername(data.user.username);
+    setPlan(data.user.plan ?? "free");
     setBalance(data.balance);
   }
 
@@ -58,6 +61,7 @@ export default function App() {
       .finally(() => {
         setToken(null);
         setUsername(null);
+        setPlan("free");
         setBalance(0);
       });
   }
@@ -76,6 +80,7 @@ export default function App() {
         <StudioView
           lang={lang}
           username={username}
+          plan={plan}
           balance={balance}
           onBalanceChange={setBalance}
           onLogout={handleLogout}
@@ -86,7 +91,7 @@ export default function App() {
       )}
       <footer className="app-footer">
         <span className="footer-brand" dir="ltr">
-          {t.brand} Studio{version ? ` · v${version}` : ""}
+          {t.brand}{version ? ` · v${version}` : ""}
         </span>
         <span className="muted">{t.footerNote}</span>
       </footer>

@@ -1,9 +1,10 @@
 """VideoComposer - assembles keyframes into a real MP4 using ffmpeg.
 
 Pipeline per scene: cover-scale -> Ken Burns (zoompan) -> x264 segment.
-Segments are joined with xfade transitions (fade/wipe/slide cycle), then a
-small "Tayf Studio" watermark is burned in (when a font is found).
-Everything here is REAL video assembly - no simulation involved.
+Segments are joined with xfade transitions (fade/wipe/slide cycle). The
+legacy graph can burn a small "Al-Manazir" watermark; new jobs keep stored
+chunks neutral and apply the brand once on the final video via
+``apply_watermark``. Everything here is REAL video assembly - no simulation.
 
 ffmpeg resolution order: system binary -> imageio-ffmpeg bundled binary.
 On Termux: `pkg install ffmpeg` provides both ffmpeg and ffprobe.
@@ -15,6 +16,8 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+
+from app.core.branding import WATERMARK_TEXT
 
 ASPECT_DIMS: dict[str, tuple[int, int]] = {
     "16:9": (1280, 720),
@@ -110,8 +113,14 @@ def extract_thumbnail(video_bytes: bytes) -> bytes | None:
         return thumb.read_bytes()
 
 
-def compose_video(frames: list[tuple[bytes, float]], aspect: str) -> ComposeResult:
-    """frames: list of (image_bytes, per-scene duration seconds), in order."""
+def compose_video(
+    frames: list[tuple[bytes, float]], aspect: str, *, watermark: bool = True
+) -> ComposeResult:
+    """frames: list of (image_bytes, per-scene duration seconds), in order.
+
+    ``watermark`` is kept for legacy/no-chunk jobs. Batch 2 callers pass False
+    for stored chunks and brand the final video exactly once instead.
+    """
     if not frames:
         raise ComposerError("no frames to compose")
     width, height = ASPECT_DIMS.get(aspect, ASPECT_DIMS["16:9"])
@@ -174,8 +183,8 @@ def compose_video(frames: list[tuple[bytes, float]], aspect: str) -> ComposeResu
                 prev_label = out_label
                 seg_dur = _probe_duration(ffprobe, segment_paths[k]) or frames[k][1]
                 running = offset + fade + (seg_dur - fade)
-            if font:
-                text = "Tayf Studio"
+            if font and watermark:
+                text = WATERMARK_TEXT
                 chain.append(
                     f"[{prev_label}]drawtext=fontfile={font}:text='{text}':"
                     f"fontsize={max(height // 36, 20)}:fontcolor=white@0.55:"
@@ -218,6 +227,42 @@ def compose_video(frames: list[tuple[bytes, float]], aspect: str) -> ComposeResu
             width=width,
             height=height,
         )
+
+
+def apply_watermark(video_bytes: bytes, extension: str) -> bytes:
+    """Burn the Al-Manazir mark on final video bytes.
+
+    This is intentionally the LAST video pass: stored chunks stay provider
+    bytes (or clean keyframes), so resume never double-brands a video. Free
+    videos fail closed when ffmpeg or a usable font is unavailable.
+    """
+    if not video_bytes:
+        raise ComposerError("empty video cannot be branded")
+    ffmpeg = _resolve_binary("ffmpeg")
+    if not ffmpeg:
+        raise ComposerError("ffmpeg not found (system or imageio-ffmpeg)")
+    font = _find_font()
+    if not font:
+        raise ComposerError("branding font unavailable")
+
+    with tempfile.TemporaryDirectory(prefix="vf_brand_") as tmp:
+        work = Path(tmp)
+        source = work / f"source.{_safe_extension(extension)}"
+        source.write_bytes(video_bytes)
+        final = work / "branded.mp4"
+        drawtext = (
+            f"drawtext=fontfile={font}:text='{WATERMARK_TEXT}':"
+            "fontsize=28:fontcolor=white@0.55:"
+            "x=w-tw-24:y=24,format=yuv420p"
+        )
+        _run([
+            ffmpeg, "-y", "-i", str(source), "-vf", drawtext,
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+            "-c:a", "aac", "-movflags", "+faststart", str(final),
+        ])
+        if not final.is_file() or final.stat().st_size == 0:
+            raise ComposerError("branding produced an empty file")
+        return final.read_bytes()
 
 
 def _safe_extension(extension: str) -> str:

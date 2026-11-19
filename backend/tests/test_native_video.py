@@ -1,7 +1,10 @@
 """Native text-to-video path: the vendor video is stored instead of keyframes+ffmpeg compose."""
 
 import time
+from uuid import UUID
 
+from app.db.session import SessionLocal
+from app.models import User
 from app.services.ai.base import VideoResult
 from app.services.ai.mock_provider import MockAIProvider
 
@@ -42,7 +45,15 @@ def test_native_t2v_pipeline_stores_vendor_video(client, auth_headers, project_i
     monkeypatch.setattr(pipeline_module, "get_ai_provider", NativeVideoProvider)
     monkeypatch.setattr(pipeline_module, "extract_thumbnail", lambda _raw: None)
 
-    headers, _ = auth_headers
+    headers, data = auth_headers
+    # Pro keeps vendor bytes bit-for-bit intact; the fake MP4 below is not a
+    # real video, so the Free branding pass would correctly reject it.
+    with SessionLocal() as db:
+        user = db.get(User, UUID(data["user"]["id"]))
+        assert user is not None
+        user.plan = "pro"
+        db.commit()
+
     created = client.post(
         f"/api/v1/projects/{project_id}/jobs",
         json={"prompt": "a lantern drifting over a night river", "num_scenes": 2},

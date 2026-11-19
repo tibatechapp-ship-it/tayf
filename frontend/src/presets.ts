@@ -1,8 +1,8 @@
 /** Studio job presets: built-in catalog plus user recipes in localStorage.
  *
  * No backend fields, no migrations: a preset only fills the five values that
- * `createJob` already accepts. No voice/TTS field exists because Tayf has no
- * audio stage yet.
+ * `createJob` already accepts. No voice/TTS field exists because Al-Manazir has
+ * no audio stage yet.
  */
 
 import { ASPECTS, STYLES, type Copy } from "./i18n/dictionary";

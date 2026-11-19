@@ -41,6 +41,7 @@ import {
 interface Props {
   lang: Lang;
   username: string;
+  plan: string;
   balance: number;
   onBalanceChange: (balance: number) => void;
   onLogout: () => void;
@@ -53,6 +54,7 @@ const POLL_MS = 4000;
 export default function StudioView({
   lang,
   username,
+  plan,
   balance,
   onBalanceChange,
   onLogout,
@@ -448,7 +450,7 @@ export default function StudioView({
       const anchor = document.createElement("a");
       anchor.href = url;
       const ext = kind === "project" ? "json" : kind === "stills" ? "zip" : "srt";
-      anchor.download = `tayf-${jobId}.${ext}`;
+      anchor.download = `al-manazir-${jobId}.${ext}`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -566,6 +568,10 @@ export default function StudioView({
         <div className="brand-row">
           <h1 className="brand">{t.brand}</h1>
           <span className="username" dir="ltr">@{username}</span>
+          <span className="plan-chip" dir="ltr" data-testid="plan">
+            {plan === "pro" ? t.planPro : t.planFree}
+          </span>
+          {plan !== "pro" && <span className="plan-note">{t.planFreeHint}</span>}
         </div>
         <div className="topbar-actions">
           <span className="balance-chip" title={t.balance} data-testid="balance">

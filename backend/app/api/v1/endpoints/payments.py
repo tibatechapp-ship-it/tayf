@@ -6,9 +6,12 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.branding import PRO_PACKAGE, PRO_PLAN
 from app.core.config import get_settings
 from app.core.stripe_webhooks import (
     StripeSignatureError,
@@ -16,7 +19,7 @@ from app.core.stripe_webhooks import (
     verify_stripe_event,
 )
 from app.db.session import get_session
-from app.models import User
+from app.models import ProGrant, User
 from app.schemas.payments import (
     CheckoutSessionOut,
     StripeWebhookOut,
@@ -133,7 +136,8 @@ async def stripe_webhook(request: Request, db_session: SessionDep) -> StripeWebh
         user_id = uuid.UUID(str(obj.get("client_reference_id", "")))
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid user reference") from exc
-    if db_session.get(User, user_id) is None:
+    user = db_session.get(User, user_id)
+    if user is None:
         # Deleted accounts cannot receive credits; acknowledge so Stripe stops retrying.
         return StripeWebhookOut(received=True)
 
@@ -145,5 +149,19 @@ async def stripe_webhook(request: Request, db_session: SessionDep) -> StripeWebh
         reason="topup_stripe",
         operation_key=operation_key,
     )
-    db_session.commit()
+    if package.name == PRO_PACKAGE:
+        already_granted = db_session.scalar(
+            select(ProGrant).where(ProGrant.stripe_session_id == session_id)
+        )
+        if already_granted is None:
+            db_session.add(
+                ProGrant(user_id=user_id, stripe_session_id=session_id)
+            )
+            user.plan = PRO_PLAN
+    try:
+        db_session.commit()
+    except IntegrityError:
+        # Concurrent duplicate delivery: the other request already committed
+        # the same session's grant and plan. Acknowledge, do not double-grant.
+        db_session.rollback()
     return StripeWebhookOut(received=True, credited=True)

@@ -32,6 +32,11 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     credit_balance: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
+    # Server-owned entitlement. Clients can read it, never set it. The paid
+    # ``pro`` Stripe top-up flips this value through a signed webhook.
+    plan: Mapped[str] = mapped_column(
+        String(8), default="free", server_default="free", nullable=False
+    )
 
     projects: Mapped[list["Project"]] = relationship(  # noqa: F821 - resolved by registry
         back_populates="owner",

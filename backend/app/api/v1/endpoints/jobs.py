@@ -19,6 +19,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import get_current_user
 from app.core import job_proof
+from app.core.branding import branding_snapshot
 from app.core.config import get_settings
 from app.core.metrics import record_job_terminal
 from app.core.ratelimit import job_rate_limit
@@ -79,6 +80,7 @@ def create_job(
 ) -> JobOut:
     settings = get_settings()
     project = _get_owned_project(session, project_id, current_user.id)
+    branding = branding_snapshot(current_user.plan)
     safety = get_safety_layer()
     cost = payload.num_scenes * get_settings().CREDIT_PER_SCENE
 
@@ -91,6 +93,7 @@ def create_job(
             num_scenes=payload.num_scenes,
             aspect=payload.aspect,
             style=payload.style,
+            input_params={"branding": branding},
             provider_name="safety",
             model_version="pre-filter",
             status=GenerationStatus.REJECTED,
@@ -114,7 +117,7 @@ def create_job(
         num_scenes=payload.num_scenes,
         aspect=payload.aspect,
         style=payload.style,
-        input_params={"requested_by": str(current_user.id)},
+        input_params={"requested_by": str(current_user.id), "branding": branding},
         status=GenerationStatus.PENDING,
         credits_charged=cost,
         require_approvals=payload.require_approvals,
